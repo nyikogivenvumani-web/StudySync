@@ -14,7 +14,7 @@
 
 ## 1. Objective
 
-Deliver the StudySync MVP described in `PRD.md` v1.2: authenticated student/admin access with password reset, module-based discovery and module requests, admin catalogue and room management, silent video-only 20-person study rooms, a synchronized 50/10 Pomodoro timer controlled by admins, live status tags, a persistent shared checklist, and text-based module forums with editing and admin moderation.
+Deliver the StudySync MVP described in `PRD.md` v1.3: authenticated student/admin access with password reset, module-based discovery and module requests, admin catalogue and room management, silent video-only 20-person study rooms, a synchronized 50/10 Pomodoro timer controlled by admins, live status tags, a persistent shared checklist, and text-based module forums with editing and admin moderation.
 
 The implementation uses the specified stack:
 
@@ -66,7 +66,7 @@ In order of what to defer first: hard delete of catalogue records (use archive o
 ### 4.1 Documentation and design
 
 - [ ] Finalize `BUSINESS.md`.
-- [ ] Review `docs/PRD.md` v1.2 and `IMPLEMENTATION_PLAN.md` v1.2.
+- [ ] Review `docs/PRD.md` v1.3 and `IMPLEMENTATION_PLAN.md` v1.3.
 - [ ] Update the Google Stitch prompts for v1.3 (single theme; "Closed rooms" section and read-only closed-room state; no moderator, camera-policy, attachment, or remove-participant designs). **[v1.3]**
 - [ ] Complete Google Stitch designs for S01–S08 and the three dialogs.
 - [ ] Export style-guide tokens to `docs/designs/` and store approved design references.
@@ -154,7 +154,7 @@ In order of what to defer first: hard delete of catalogue records (use archive o
 - [ ] Student can create a request but cannot insert into `modules` or alter request status.
 - [ ] Approve & Add creates the module and marks the request approved; Reject marks it rejected.
 - [ ] Admin can create, edit, verify, archive/delete; student cannot.
-- [ ] Discovery filters rooms by selected modules and excludes closed rooms.
+- [ ] Discovery filters joinable open rooms by selected modules; closed rooms appear separately with read-only checklists.
 
 ### 5.3 Room creation, capacity, and closing **[v1.2]**
 
@@ -425,7 +425,7 @@ Do not rely on frontend-only restrictions for security or business rules.
 | Module profile | Institution and module selection persist correctly |
 | Module requests | Create, approve, reject; student cannot write to modules |
 | Catalogue | Admin create, edit, verify, archive/delete; student denied |
-| Discovery | Results filtered by selected modules; closed rooms excluded |
+| Discovery | Joinable open rooms filtered by selected modules; closed rooms listed separately with read-only checklists |
 | Room management | Admin-only create and close |
 | Room capacity | 20 allowed; 21st rejected; concurrent final-seat test |
 | Video | Valid token, tiles, microphone disabled, reconnect, camera-denied message |
@@ -485,4 +485,4 @@ The MVP is complete when all P0 requirements in `PRD.md` pass the release accept
 
 ## 14. Source alignment
 
-This plan follows the four phases and dates in the supplied **Business Plan & MVP Specification: StudySync** and PRD v1.2. Tasks, exit criteria, test cases, repository layout, and risk mitigations are implementation-level elaborations. Items marked **[v1.2]** reflect the product owner's decision to defer four feature areas to v2; items marked **[v1.3]** resolve the remaining design questions; unresolved choices are identified rather than treated as confirmed.
+This plan follows the four phases and dates in the supplied **Business Plan & MVP Specification: StudySync** and PRD v1.3. Tasks, exit criteria, test cases, repository layout, and risk mitigations are implementation-level elaborations. Items marked **[v1.2]** reflect the product owner's decision to defer four feature areas to v2; items marked **[v1.3]** resolve the remaining design questions; unresolved choices are identified rather than treated as confirmed.
