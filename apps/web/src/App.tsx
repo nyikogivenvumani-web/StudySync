@@ -1,14 +1,37 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { AlertCircle, BookOpenCheck, Eye, EyeOff } from "lucide-react";
+import {
+  AlertCircle,
+  BookOpenCheck,
+  Eye,
+  EyeOff,
+  User,
+} from "lucide-react";
+import { NAV_ITEMS } from "./lib/navigation.js";
+import AdminCatalogueScreen from "./features/admin/AdminCatalogueScreen.js";
+import ForumModerationScreen from "./features/admin/ForumModerationScreen.js";
+import DiscoverScreen from "./features/discover/DiscoverScreen.js";
+import ProfileScreen from "./features/profile/ProfileScreen.js";
+import ForumScreen from "./features/forum/ForumScreen.js";
+import { INITIAL_FORUM_POSTS, type ForumPost } from "./features/forum/forumData.js";
+import SilentRoomScreen from "./features/room/SilentRoomScreen.js";
 
 type AuthMode = "login" | "signup";
+type PreviewRole = "student" | "admin";
 
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [notice, setNotice] = useState("");
+  const [previewRole, setPreviewRole] = useState<PreviewRole>("student");
+  const [forumPosts, setForumPosts] =
+    useState<ForumPost[]>(INITIAL_FORUM_POSTS);
   const isPasswordReset = pathname === "/reset-password";
+  const isAuthRoute = pathname === "/" || isPasswordReset;
+  const [selectedModules, setSelectedModules] = useState([
+    "MAT2611",
+    "COS1511",
+  ]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -39,6 +62,192 @@ function App() {
   function selectAuthMode(mode: AuthMode) {
     setAuthMode(mode);
     setNotice("");
+  }
+
+  function showUnavailableMessage(message: string) {
+    setNotice(message);
+  }
+
+  if (!isAuthRoute) {
+    const isAdminRoute = pathname.startsWith("/admin");
+    const isAdminPreview = previewRole === "admin";
+    const hasAdminAccess = isAdminPreview;
+    const activeScreen = isAdminRoute
+      ? pathname === "/admin/moderation"
+        ? "moderation"
+        : "admin"
+      : pathname === "/discover"
+        ? "discover"
+        : pathname === "/forum"
+          ? "forum"
+          : pathname === "/room" || pathname.startsWith("/room/")
+            ? "room"
+            : "profile";
+    const navigationItems = NAV_ITEMS.filter(
+      (item) =>
+        (item.requiresAdmin ? hasAdminAccess : true) &&
+        (item.id === "discover" ||
+          item.id === "room" ||
+          item.id === "forum" ||
+          item.id === "profile" ||
+          item.id === "admin"),
+    );
+    const roomId = pathname.split("/")[2] ?? "preview-room";
+    const isClosedRoom = roomId.includes("closed");
+    const forumModuleCode = selectedModules[0] ?? "MAT2611";
+
+    return (
+      <div className="workspace-layout">
+        <aside className="workspace-sidebar">
+          <a
+            className="workspace-brand"
+            href="/discover"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate("/discover");
+            }}
+          >
+            <BookOpenCheck size={21} aria-hidden="true" />
+            <span>StudySync</span>
+          </a>
+          <div className="workspace-context">
+            <span>Preview role</span>
+            <strong>{isAdminPreview ? "Admin preview" : "Student preview"}</strong>
+          </div>
+          <StudentNavigation
+            items={navigationItems}
+            pathname={pathname}
+            onNavigate={navigate}
+          />
+          <div className="sidebar-account">
+            <span className="account-avatar" aria-hidden="true">
+              <User size={17} />
+            </span>
+            <span>
+              <strong>Preview student</strong>
+              <small>Demo account</small>
+            </span>
+          </div>
+        </aside>
+
+        <div className="workspace-main">
+          <header className="workspace-topbar">
+            <div className="workspace-title">
+              <BookOpenCheck size={18} aria-hidden="true" />
+              <span>
+                {isAdminRoute
+                  ? "Admin management workspace"
+                  : "Student module workspace"}
+              </span>
+            </div>
+            <div className="topbar-actions">
+              <label className="preview-role-control">
+                <span>Preview role</span>
+                <select
+                  aria-label="Preview role"
+                  value={previewRole}
+                  onChange={(event) =>
+                    setPreviewRole(
+                      event.target.value === "admin" ? "admin" : "student",
+                    )
+                  }
+                >
+                  <option value="student">Student</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <span className="connection-chip">
+                <span className="connection-dot" aria-hidden="true" />
+                Preview mode
+              </span>
+            </div>
+          </header>
+
+          <main className="workspace-content">
+            {notice && (
+              <p className="workspace-notice" role="status">
+                <AlertCircle size={17} aria-hidden="true" />
+                {notice}
+              </p>
+            )}
+            {isAdminRoute && !hasAdminAccess ? (
+              <section className="denied-access-card" role="alert">
+                <AlertCircle size={23} aria-hidden="true" />
+                <div>
+                  <p className="eyebrow">Admin-only area</p>
+                  <h1>You don't have permission to access this page.</h1>
+                  <p>
+                    Switch to the Admin preview role to view these screens.
+                  </p>
+                </div>
+              </section>
+            ) : activeScreen === "admin" ? (
+              <AdminCatalogueScreen
+                onUnavailable={showUnavailableMessage}
+                onModeration={() => navigate("/admin/moderation")}
+              />
+            ) : activeScreen === "moderation" ? (
+              <ForumModerationScreen
+                posts={forumPosts}
+                onPostsChange={setForumPosts}
+                onUnavailable={showUnavailableMessage}
+                onCatalogue={() => navigate("/admin")}
+              />
+            ) : activeScreen === "profile" ? (
+              <ProfileScreen
+                selectedModules={selectedModules}
+                onModulesChange={setSelectedModules}
+                onSave={() =>
+                  showUnavailableMessage(
+                    "Preview only: selections have not been saved to your account.",
+                  )
+                }
+                onRequest={() =>
+                  showUnavailableMessage(
+                    "Request not submitted: module requests need the Supabase connection.",
+                  )
+                }
+                onDiscover={() => navigate("/discover")}
+              />
+            ) : activeScreen === "discover" ? (
+              <DiscoverScreen
+                selectedModules={selectedModules}
+                onEditProfile={() => navigate("/profile")}
+                onJoinRoom={() =>
+                  showUnavailableMessage(
+                    "Room joining is not connected yet. No seat has been reserved.",
+                  )
+                }
+                onViewChecklist={(closedRoomId) =>
+                  navigate(`/room/${closedRoomId}`)
+                }
+              />
+            ) : activeScreen === "room" ? (
+              <SilentRoomScreen
+                roomId={roomId}
+                isClosed={isClosedRoom}
+                onDiscover={() => navigate("/discover")}
+                onForum={() => navigate("/forum")}
+                onUnavailable={showUnavailableMessage}
+              />
+            ) : (
+              <ForumScreen
+                moduleCode={forumModuleCode}
+                posts={forumPosts}
+                onUnavailable={showUnavailableMessage}
+              />
+            )}
+          </main>
+
+          <StudentNavigation
+            items={navigationItems}
+            pathname={pathname}
+            onNavigate={navigate}
+            mobile
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -175,6 +384,49 @@ function App() {
         </footer>
       </section>
     </main>
+  );
+}
+
+type StudentNavigationProps = {
+  items: typeof NAV_ITEMS;
+  pathname: string;
+  onNavigate: (path: string) => void;
+  mobile?: boolean;
+};
+
+function StudentNavigation({
+  items,
+  pathname,
+  onNavigate,
+  mobile = false,
+}: StudentNavigationProps) {
+  return (
+    <nav
+      className={mobile ? "mobile-navigation" : "student-navigation"}
+      aria-label="Workspace navigation"
+    >
+      {items.map((item) => {
+        const Icon = item.icon;
+        const isCurrent =
+          pathname === item.path ||
+          (item.id === "room" && pathname.startsWith("/room/"));
+        return (
+          <a
+            className={`student-nav-link${isCurrent ? " is-current" : ""}`}
+            href={item.path}
+            key={item.id}
+            aria-current={isCurrent ? "page" : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate(item.path);
+            }}
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span>{item.label}</span>
+          </a>
+        );
+      })}
+    </nav>
   );
 }
 

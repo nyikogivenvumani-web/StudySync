@@ -4,6 +4,11 @@ StudySync is a responsive study-accountability app for students studying the
 same university modules. The MVP scope and requirements are defined in
 [the PRD](docs/PRD.md) and [the implementation plan](docs/Implementation_plan.md).
 
+## Design prototype
+
+[Open the StudySync project in Google Stitch](https://stitch.google.com/projects/17823946123067257044).
+Access may require a Google account that has been granted permission.
+
 ## Technology
 
 - React and TypeScript frontend (`apps/web`)
