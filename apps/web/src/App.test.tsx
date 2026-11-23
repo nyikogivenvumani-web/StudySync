@@ -251,4 +251,126 @@ describe("StudySync screens", () => {
 
     expect(screen.getByText(/Edit not saved/)).toBeInTheDocument();
   });
+
+  it("denies student preview access to admin routes and allows admin preview", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/admin");
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "You don't have permission to access this page.",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "Admin Console" }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Preview role"), "admin");
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Module catalogue & room governance",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getAllByRole("link", { name: "Admin Console" })[0],
+    ).toBeVisible();
+  });
+
+  it("previews catalogue request review and confirms closing a room", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/admin");
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Preview role"), "admin");
+
+    await user.click(screen.getByRole("button", { name: /Module requests/ }));
+    expect(
+      screen.getByRole("heading", { name: "Student module requests" }),
+    ).toBeVisible();
+    await user.click(screen.getAllByRole("button", { name: "Reject" })[0]);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByText(/Request not rejected/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Rooms" }));
+    await user.click(screen.getAllByRole("button", { name: "Close room" })[0]);
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "Close this study room?",
+    );
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Close room",
+      }),
+    );
+    expect(screen.getByText(/Room not closed/)).toBeInTheDocument();
+  });
+
+  it("shows institution catalogue records and preview-only add form", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/admin");
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Preview role"), "admin");
+
+    expect(
+      screen.getByRole("heading", { name: "Institution records" }),
+    ).toBeVisible();
+    expect(screen.getAllByText("Preview University").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Add institution" }));
+    await user.type(
+      screen.getByLabelText("Institution name"),
+      "Example Institute",
+    );
+    await user.selectOptions(screen.getByLabelText("Institution type"), "College");
+    await user.click(
+      screen.getAllByRole("button", { name: "Add institution" })[1],
+    );
+
+    expect(screen.getByText(/Institution not added/)).toBeInTheDocument();
+  });
+
+  it("reflects admin pin changes in the student forum preview", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/admin/moderation");
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Preview role"), "admin");
+
+    await user.click(
+      screen.getAllByRole("button", { name: "Pin announcement" })[0],
+    );
+    expect(screen.getByText(/now pinned in this browser session/)).toBeInTheDocument();
+    await user.click(screen.getAllByRole("link", { name: "Group Forum" })[0]);
+
+    expect(screen.getAllByText("Pinned notice")).toHaveLength(2);
+  });
+
+  it("removes a post from the student forum preview after confirmation", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/admin/moderation");
+    render(<App />);
+    await user.selectOptions(screen.getByLabelText("Preview role"), "admin");
+
+    const peerPost = screen
+      .getByText(
+        "Shared notes for Gaussian elimination have been updated in the course resources.",
+      )
+      .closest("article");
+    expect(peerPost).not.toBeNull();
+    if (!peerPost) return;
+    await user.click(
+      within(peerPost).getByRole("button", { name: "Remove post" }),
+    );
+    expect(screen.getByRole("alertdialog")).toBeVisible();
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", {
+        name: "Remove post",
+      }),
+    );
+    await user.click(screen.getAllByRole("link", { name: "Group Forum" })[0]);
+
+    expect(
+      screen.queryByText(
+        "Shared notes for Gaussian elimination have been updated in the course resources.",
+      ),
+    ).not.toBeInTheDocument();
+  });
 });

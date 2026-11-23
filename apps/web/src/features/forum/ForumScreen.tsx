@@ -9,60 +9,22 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
-
-type ForumPost = {
-  id: string;
-  author: string;
-  role: "Student" | "Admin";
-  age: string;
-  body: string;
-  edited?: boolean;
-  pinned?: boolean;
-  ownedByCurrentUser?: boolean;
-};
+import type { ForumPost } from "./forumData.js";
 
 type ForumScreenProps = {
   moduleCode: string;
+  posts: ForumPost[];
   onUnavailable: (message: string) => void;
 };
 
-const samplePosts: ForumPost[] = [
-  {
-    id: "pinned-update",
-    author: "Course Administrator",
-    role: "Admin",
-    age: "2 hours ago",
-    body: "Tutorial moved from 16:00 to 18:00 today. Please review the matrix-rank examples before the session.",
-    pinned: true,
-  },
-  {
-    id: "own-update",
-    author: "Preview student (You)",
-    role: "Student",
-    age: "45 minutes ago",
-    body: "I am reviewing Section 1.4 before the next study block. The worked examples are helpful.",
-    ownedByCurrentUser: true,
-  },
-  {
-    id: "peer-update",
-    author: "Sipho M.",
-    role: "Student",
-    age: "15 minutes ago",
-    body: "Shared notes for Gaussian elimination have been updated in the course resources.",
-    edited: true,
-  },
-  {
-    id: "reminder",
-    author: "Lerato D.",
-    role: "Student",
-    age: "3 hours ago",
-    body: "Reminder: the differential equations quiz opens tomorrow at 08:00.",
-  },
-];
-
-function ForumScreen({ moduleCode, onUnavailable }: ForumScreenProps) {
+function ForumScreen({
+  moduleCode,
+  posts,
+  onUnavailable,
+}: ForumScreenProps) {
   const [draft, setDraft] = useState("");
   const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
+  const modulePosts = posts.filter((post) => post.moduleCode === moduleCode);
 
   function submitPost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -168,59 +130,69 @@ function ForumScreen({ moduleCode, onUnavailable }: ForumScreenProps) {
           </section>
 
           <section className="forum-post-list" aria-label="Module forum posts">
-            {samplePosts.map((post) => (
-              <article
-                className={`forum-post${post.pinned ? " is-pinned" : ""}`}
-                key={post.id}
-              >
-                <header className="forum-post-header">
-                  <div className="post-avatar" aria-hidden="true">
-                    {post.role === "Admin" ? (
-                      <ShieldCheck size={18} />
-                    ) : (
-                      post.author
-                        .split(" ")
-                        .filter(Boolean)
-                        .map((part) => part[0])
-                        .join("")
-                        .slice(0, 2)
+            {modulePosts.length > 0 ? (
+              modulePosts.map((post) => (
+                <article
+                  className={`forum-post${post.pinned ? " is-pinned" : ""}`}
+                  key={post.id}
+                >
+                  <header className="forum-post-header">
+                    <div className="post-avatar" aria-hidden="true">
+                      {post.role === "Admin" ? (
+                        <ShieldCheck size={18} />
+                      ) : (
+                        post.author
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((part) => part[0])
+                          .join("")
+                          .slice(0, 2)
+                      )}
+                    </div>
+                    <div className="post-author">
+                      <strong>{post.author}</strong>
+                      <span className="author-role">{post.role}</span>
+                      <small>
+                        {post.age}
+                        {post.edited && (
+                          <span className="edited-label">Edited</span>
+                        )}
+                      </small>
+                    </div>
+                    {post.pinned && (
+                      <span className="pinned-label">
+                        <Pin size={14} aria-hidden="true" />
+                        Pinned notice
+                      </span>
                     )}
-                  </div>
-                  <div className="post-author">
-                    <strong>{post.author}</strong>
-                    <span className="author-role">{post.role}</span>
-                    <small>
-                      {post.age}
-                      {post.edited && <span className="edited-label">Edited</span>}
-                    </small>
-                  </div>
-                  {post.pinned && (
-                    <span className="pinned-label">
-                      <Pin size={14} aria-hidden="true" />
-                      Pinned notice
+                    {post.ownedByCurrentUser && (
+                      <button
+                        className="secondary-button edit-post-button"
+                        type="button"
+                        onClick={() => startEditing(post)}
+                      >
+                        <Pencil size={14} aria-hidden="true" />
+                        Edit
+                      </button>
+                    )}
+                  </header>
+                  <p className="forum-post-body">{post.body}</p>
+                  <footer className="forum-post-footer">
+                    <span>
+                      {post.pinned ? "Official module notice" : "Module post"}
                     </span>
-                  )}
-                  {post.ownedByCurrentUser && (
-                    <button
-                      className="secondary-button edit-post-button"
-                      type="button"
-                      onClick={() => startEditing(post)}
-                    >
-                      <Pencil size={14} aria-hidden="true" />
-                      Edit
-                    </button>
-                  )}
-                </header>
-                <p className="forum-post-body">{post.body}</p>
-                <footer className="forum-post-footer">
-                  <span>{post.pinned ? "Official module notice" : "Module post"}</span>
-                  <span className="text-only-label">
-                    <Check size={13} aria-hidden="true" />
-                    Text only
-                  </span>
-                </footer>
-              </article>
-            ))}
+                    <span className="text-only-label">
+                      <Check size={13} aria-hidden="true" />
+                      Text only
+                    </span>
+                  </footer>
+                </article>
+              ))
+            ) : (
+              <div className="empty-inline">
+                <p>No posts for this module yet.</p>
+              </div>
+            )}
           </section>
         </div>
 
