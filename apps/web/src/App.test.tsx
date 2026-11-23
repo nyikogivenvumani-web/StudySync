@@ -8,7 +8,7 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-describe("StudySync authentication screen", () => {
+describe("StudySync screens", () => {
   it("renders the login form without signed-in navigation", () => {
     render(<App />);
 
@@ -180,5 +180,75 @@ describe("StudySync authentication screen", () => {
     expect(
       screen.getByRole("heading", { name: "Choose modules to see study rooms" }),
     ).toBeVisible();
+  });
+
+  it("renders a student room preview with a read-only synchronized-timer shell", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/room");
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", { name: "Silent study room" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("50:00")).toBeVisible();
+    expect(screen.getByText(/Microphones are disabled/)).toBeVisible();
+    expect(screen.getByLabelText("Your study status")).toHaveAttribute(
+      "maxLength",
+      "60",
+    );
+
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /Mark incomplete: Complete practice questions/,
+      }),
+    );
+
+    expect(screen.getByText(/checklist changes are not saved/)).toBeInTheDocument();
+  });
+
+  it("opens closed-room checklists in read-only mode", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/discover");
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "View checklist" }));
+
+    expect(window.location.pathname).toBe("/room/room-cos-closed");
+    expect(screen.getByRole("heading", { name: "This room is closed" })).toBeVisible();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Study timer" })).not.toBeInTheDocument();
+  });
+
+  it("renders the module forum and reports that posts are not published", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/forum");
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Module forum" })).toBeVisible();
+    expect(screen.getByText("Pinned notice")).toBeVisible();
+    expect(screen.getByText("Edited")).toBeVisible();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "New post text" }),
+      "Study session reminder",
+    );
+    await user.click(screen.getByRole("button", { name: "Publish notice" }));
+
+    expect(screen.getByText(/Post not published/)).toBeInTheDocument();
+  });
+
+  it("supports editing the current preview student's post without saving it", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/forum");
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByRole("textbox", { name: "Edit post text" })).toHaveValue(
+      "I am reviewing Section 1.4 before the next study block. The worked examples are helpful.",
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText(/Edit not saved/)).toBeInTheDocument();
   });
 });

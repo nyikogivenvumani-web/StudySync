@@ -9,6 +9,8 @@ import {
 import { NAV_ITEMS } from "./lib/navigation.js";
 import DiscoverScreen from "./features/discover/DiscoverScreen.js";
 import ProfileScreen from "./features/profile/ProfileScreen.js";
+import ForumScreen from "./features/forum/ForumScreen.js";
+import SilentRoomScreen from "./features/room/SilentRoomScreen.js";
 
 type AuthMode = "login" | "signup";
 
@@ -60,10 +62,24 @@ function App() {
   }
 
   if (!isAuthRoute) {
-    const activeScreen = pathname === "/discover" ? "discover" : "profile";
+    const activeScreen =
+      pathname === "/discover"
+        ? "discover"
+        : pathname === "/forum"
+          ? "forum"
+          : pathname === "/room" || pathname.startsWith("/room/")
+            ? "room"
+            : "profile";
     const navigationItems = NAV_ITEMS.filter(
-      (item) => item.id === "discover" || item.id === "profile",
+      (item) =>
+        item.id === "discover" ||
+        item.id === "room" ||
+        item.id === "forum" ||
+        item.id === "profile",
     );
+    const roomId = pathname.split("/")[2] ?? "preview-room";
+    const isClosedRoom = roomId.includes("closed");
+    const forumModuleCode = selectedModules[0] ?? "MAT2611";
 
     return (
       <div className="workspace-layout">
@@ -134,7 +150,7 @@ function App() {
                 }
                 onDiscover={() => navigate("/discover")}
               />
-            ) : (
+            ) : activeScreen === "discover" ? (
               <DiscoverScreen
                 selectedModules={selectedModules}
                 onEditProfile={() => navigate("/profile")}
@@ -143,11 +159,22 @@ function App() {
                     "Room joining is not connected yet. No seat has been reserved.",
                   )
                 }
-                onViewChecklist={() =>
-                  showUnavailableMessage(
-                    "The read-only closed-room checklist will be available with the silent room screen.",
-                  )
+                onViewChecklist={(closedRoomId) =>
+                  navigate(`/room/${closedRoomId}`)
                 }
+              />
+            ) : activeScreen === "room" ? (
+              <SilentRoomScreen
+                roomId={roomId}
+                isClosed={isClosedRoom}
+                onDiscover={() => navigate("/discover")}
+                onForum={() => navigate("/forum")}
+                onUnavailable={showUnavailableMessage}
+              />
+            ) : (
+              <ForumScreen
+                moduleCode={forumModuleCode}
+                onUnavailable={showUnavailableMessage}
               />
             )}
           </main>
@@ -320,7 +347,9 @@ function StudentNavigation({
     >
       {items.map((item) => {
         const Icon = item.icon;
-        const isCurrent = pathname === item.path;
+        const isCurrent =
+          pathname === item.path ||
+          (item.id === "room" && pathname.startsWith("/room/"));
         return (
           <a
             className={`student-nav-link${isCurrent ? " is-current" : ""}`}
