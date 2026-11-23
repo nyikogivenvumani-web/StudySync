@@ -108,4 +108,77 @@ describe("StudySync authentication screen", () => {
       "Password recovery is not available until Supabase Auth is connected.",
     );
   });
+
+  it("renders the profile selections and previews save feedback", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/profile");
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", { name: "Student module profile" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /MAT2611/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /ECS1501/ })).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: "Save selections" }));
+
+    expect(screen.getByText(/selections have not been saved/i)).toBeInTheDocument();
+  });
+
+  it("keeps module requests inline and does not pretend to submit them", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/profile");
+    render(<App />);
+
+    const institutionSelects = screen.getAllByLabelText("Institution");
+    await user.selectOptions(institutionSelects[1], "preview-university");
+    await user.type(screen.getByLabelText("Module code"), "CS224N");
+    await user.click(screen.getByRole("button", { name: "Submit request" }));
+
+    expect(
+      screen.getByText(/Request not submitted: module requests need the Supabase connection/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your module requests" })).toBeVisible();
+  });
+
+  it("filters sample rooms by selected modules and keeps full rooms unavailable", () => {
+    window.history.replaceState({}, "", "/discover");
+    render(<App />);
+
+    expect(
+      screen.getByRole("heading", { name: "Study room discovery" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("MAT2611", { selector: ".module-chip" })).toBeVisible();
+    expect(screen.queryByText("Economics IA: Microeconomics")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Room full (20/20)" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "View checklist" })).toBeVisible();
+  });
+
+  it("explains that joining a preview room does not reserve a seat", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/discover");
+    render(<App />);
+
+    await user.click(screen.getAllByRole("button", { name: "Join room" })[0]);
+
+    expect(
+      screen.getByText(/No seat has been reserved/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a clear empty state when no modules are selected", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/profile");
+    render(<App />);
+
+    await user.click(screen.getByRole("checkbox", { name: /MAT2611/ }));
+    await user.click(screen.getByRole("checkbox", { name: /COS1511/ }));
+    await user.click(screen.getByRole("button", { name: "Continue to room discovery" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Choose modules to see study rooms" }),
+    ).toBeVisible();
+  });
 });

@@ -1,5 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { AlertCircle, BookOpenCheck, Eye, EyeOff } from "lucide-react";
+import {
+  AlertCircle,
+  BookOpenCheck,
+  Eye,
+  EyeOff,
+  User,
+} from "lucide-react";
+import { NAV_ITEMS } from "./lib/navigation.js";
+import DiscoverScreen from "./features/discover/DiscoverScreen.js";
+import ProfileScreen from "./features/profile/ProfileScreen.js";
 
 type AuthMode = "login" | "signup";
 
@@ -9,6 +18,11 @@ function App() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [notice, setNotice] = useState("");
   const isPasswordReset = pathname === "/reset-password";
+  const isAuthRoute = pathname === "/" || isPasswordReset;
+  const [selectedModules, setSelectedModules] = useState([
+    "MAT2611",
+    "COS1511",
+  ]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -39,6 +53,114 @@ function App() {
   function selectAuthMode(mode: AuthMode) {
     setAuthMode(mode);
     setNotice("");
+  }
+
+  function showUnavailableMessage(message: string) {
+    setNotice(message);
+  }
+
+  if (!isAuthRoute) {
+    const activeScreen = pathname === "/discover" ? "discover" : "profile";
+    const navigationItems = NAV_ITEMS.filter(
+      (item) => item.id === "discover" || item.id === "profile",
+    );
+
+    return (
+      <div className="workspace-layout">
+        <aside className="workspace-sidebar">
+          <a
+            className="workspace-brand"
+            href="/discover"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate("/discover");
+            }}
+          >
+            <BookOpenCheck size={21} aria-hidden="true" />
+            <span>StudySync</span>
+          </a>
+          <div className="workspace-context">
+            <span>Active workspace</span>
+            <strong>Student preview</strong>
+          </div>
+          <StudentNavigation
+            items={navigationItems}
+            pathname={pathname}
+            onNavigate={navigate}
+          />
+          <div className="sidebar-account">
+            <span className="account-avatar" aria-hidden="true">
+              <User size={17} />
+            </span>
+            <span>
+              <strong>Preview student</strong>
+              <small>Demo account</small>
+            </span>
+          </div>
+        </aside>
+
+        <div className="workspace-main">
+          <header className="workspace-topbar">
+            <div className="workspace-title">
+              <BookOpenCheck size={18} aria-hidden="true" />
+              <span>Student module workspace</span>
+            </div>
+            <span className="connection-chip">
+              <span className="connection-dot" aria-hidden="true" />
+              Preview mode
+            </span>
+          </header>
+
+          <main className="workspace-content">
+            {notice && (
+              <p className="workspace-notice" role="status">
+                <AlertCircle size={17} aria-hidden="true" />
+                {notice}
+              </p>
+            )}
+            {activeScreen === "profile" ? (
+              <ProfileScreen
+                selectedModules={selectedModules}
+                onModulesChange={setSelectedModules}
+                onSave={() =>
+                  showUnavailableMessage(
+                    "Preview only: selections have not been saved to your account.",
+                  )
+                }
+                onRequest={() =>
+                  showUnavailableMessage(
+                    "Request not submitted: module requests need the Supabase connection.",
+                  )
+                }
+                onDiscover={() => navigate("/discover")}
+              />
+            ) : (
+              <DiscoverScreen
+                selectedModules={selectedModules}
+                onEditProfile={() => navigate("/profile")}
+                onJoinRoom={() =>
+                  showUnavailableMessage(
+                    "Room joining is not connected yet. No seat has been reserved.",
+                  )
+                }
+                onViewChecklist={() =>
+                  showUnavailableMessage(
+                    "The read-only closed-room checklist will be available with the silent room screen.",
+                  )
+                }
+              />
+            )}
+          </main>
+
+          <StudentNavigation
+            items={navigationItems}
+            pathname={pathname}
+            onNavigate={navigate}
+            mobile
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -175,6 +297,47 @@ function App() {
         </footer>
       </section>
     </main>
+  );
+}
+
+type StudentNavigationProps = {
+  items: typeof NAV_ITEMS;
+  pathname: string;
+  onNavigate: (path: string) => void;
+  mobile?: boolean;
+};
+
+function StudentNavigation({
+  items,
+  pathname,
+  onNavigate,
+  mobile = false,
+}: StudentNavigationProps) {
+  return (
+    <nav
+      className={mobile ? "mobile-navigation" : "student-navigation"}
+      aria-label="Student navigation"
+    >
+      {items.map((item) => {
+        const Icon = item.icon;
+        const isCurrent = pathname === item.path;
+        return (
+          <a
+            className={`student-nav-link${isCurrent ? " is-current" : ""}`}
+            href={item.path}
+            key={item.id}
+            aria-current={isCurrent ? "page" : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate(item.path);
+            }}
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span>{item.label}</span>
+          </a>
+        );
+      })}
+    </nav>
   );
 }
 
