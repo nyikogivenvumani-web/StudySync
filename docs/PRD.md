@@ -2,11 +2,13 @@
 
 **Document status:** MVP specification (lightweight scope)
 **Product:** StudySync
-**Version:** 1.2
+**Version:** 1.3
 **Source:** Business Plan & MVP Specification: StudySync, plus product-owner answers to the Stitch design questions (Section 15)
 **Target MVP deadline:** Wednesday, 25 November 2026, 15:30 SAST
 
 **Changes in v1.2:** to keep the MVP deliverable by the deadline, four feature areas from v1.1 are **deferred to v2** (Section 3.3): camera enforcement and participant removal, room moderators with scheduled sessions and automatic expiry, forum file attachments, and dark mode. Requirements changed by this are marked **[v1.2]**. All other v1.1 decisions stand.
+
+**Changes in v1.3:** the remaining design questions are resolved (motion and performance rules, no tagline or illustrations, "Edited" label only, checklist creation order, 60-character status tags, closed-room checklists stay readable) and Daily.co is selected as the video provider. Marked **[v1.3]**.
 
 ---
 
@@ -164,8 +166,9 @@ Priority labels: **P0** = required for the stated MVP; **P1** = useful follow-up
 - FR-ROOM-08: Room presence shall update for participants in real time.
 - FR-ROOM-09: Rooms shall be created by an `admin` only. **[v1.2]**
 - FR-ROOM-10: A room shall remain open until an `admin` closes it. Rooms are not scheduled and do not expire automatically in the MVP. **[v1.2]**
-- FR-ROOM-11: An admin shall be able to close an active room. Closing requires confirmation. A closed room is removed from discovery and cannot be joined. **[v1.2]**
+- FR-ROOM-11: An admin shall be able to close an active room. Closing requires confirmation. A closed room is removed from the open-room list and cannot be joined, but its checklist remains viewable read-only (FR-ROOM-13, FR-CHECK-08). **[v1.3]**
 - FR-ROOM-12: If a participant's camera is denied or unavailable, the room shall show an understandable message and a placeholder tile for that participant. **[v1.2]**
+- FR-ROOM-13: Students shall find closed rooms for their modules in a "Closed rooms" section of room discovery and open the room's checklist read-only. **[v1.3]**
 
 **Acceptance criteria**
 
@@ -177,6 +180,7 @@ Priority labels: **P0** = required for the stated MVP; **P1** = useful follow-up
 - A non-admin cannot create or close a room.
 - Closing a room removes it from discovery and prevents new joins.
 - A participant with a denied or unavailable camera can see the message and is shown as a placeholder tile.
+- A closed room appears under "Closed rooms" for students of that module, cannot be joined, and shows its checklist read-only. **[v1.3]**
 
 ### 6.4 Synchronized Pomodoro timer
 
@@ -202,13 +206,14 @@ Priority labels: **P0** = required for the stated MVP; **P1** = useful follow-up
 - FR-STATUS-01: A participant shall be able to publish a short current-study status in the room.
 - FR-STATUS-02: Room participants shall be able to see each other's status tags.
 - FR-STATUS-03: Status changes shall propagate in real time.
+- FR-STATUS-04: A status tag is plain text of 1 to 60 characters after trimming whitespace. An empty value clears the status. The limit is enforced by the backend and by a database `CHECK` constraint; the UI shows a character counter and truncates long tags with an ellipsis on the tile (full text on hover or long-press). **[v1.3]**
 
 **Acceptance criteria**
 
 - A participant can set and update their own status tag; others see it without refreshing.
 - The status is associated with the correct participant and room; no impersonation.
 
-Maximum tag length and allowed characters remain to be decided during implementation.
+Rationale for 60: the sample tag "Chapter 1 – Differential Equations" is 34 characters, so 60 leaves headroom while staying readable on a small low-resolution tile. Tags render as escaped plain text (no markup or links). **[v1.3]**
 
 ### 6.6 Shared session checklist
 
@@ -220,14 +225,18 @@ Maximum tag length and allowed characters remain to be decided during implementa
 - FR-CHECK-04: Checklist changes shall synchronize in real time for all room participants.
 - FR-CHECK-05: Checklist items shall persist with the room for shared progress tracking.
 - FR-CHECK-06: A participant can edit and delete their own checklist items; an `admin` can edit and delete any item. **[v1.2]**
+- FR-CHECK-07: Checklist items are listed in creation order (oldest first). An item does not move when it is completed or edited. **[v1.3]**
+- FR-CHECK-08: When a room is closed its checklist is retained and stays viewable by members of the room's module, read-only: nobody (including admins) can add, edit, complete, or delete items. Enforced by the API and RLS. **[v1.3]**
 
 **Acceptance criteria**
 
 - A participant can add a milestone and mark it complete/incomplete; others see changes without refreshing.
 - Items remain associated with the correct room and are still present when the room is revisited.
 - A participant cannot edit or delete another participant's item; an admin can.
+- Items appear oldest first and keep their position when completed. **[v1.3]**
+- After the room is closed, module members can still read the checklist, and add/edit/complete/delete are rejected for everyone. **[v1.3]**
 
-Ordering of items remains to be decided (default: creation order).
+Items keep their creator after that participant leaves; the creator can still edit or delete them while the room is open. **[v1.3]**
 
 ### 6.7 Module group forum
 
@@ -239,7 +248,7 @@ Ordering of items remains to be decided (default: creation order).
 - FR-FORUM-04: Admins shall be able to pin announcements.
 - FR-FORUM-05: Forum updates shall be available to relevant module members.
 - FR-FORUM-06: Forum updates shall be reflected in real time where supported by Supabase Realtime.
-- FR-FORUM-07: Every user can edit their own forum post.
+- FR-FORUM-07: Every user can edit their own forum post. An edited post shows an "Edited" label; edit history is not stored or shown in the MVP. **[v1.3]**
 - FR-FORUM-08: Admins can remove any post (for example spam or off-topic content), in addition to pinning announcements. Removal requires confirmation. **[v1.2]**
 
 **Acceptance criteria**
@@ -248,6 +257,7 @@ Ordering of items remains to be decided (default: creation order).
 - A schedule change can be communicated through a forum post.
 - An admin can pin an announcement, which is visibly distinguished from ordinary posts.
 - A user can edit their own post but not another user's post.
+- An edited post shows an "Edited" label. **[v1.3]**
 - An admin can remove any post; a student cannot remove other users' posts.
 - Unauthorized users cannot perform admin-only moderation actions.
 
@@ -256,7 +266,7 @@ Ordering of items remains to be decided (default: creation order).
 ### 7.1 Security and privacy
 
 - Enforce authorization in both the Express API and Supabase RLS; do not rely on frontend-only role checks.
-- Protect live-room access through backend-generated provider tokens.
+- Protect live-room access through backend-generated provider tokens: Daily meeting tokens scoped to one room with a short expiry, on a private room that cannot be joined without a token. Microphone and screen sharing are disabled in the client and in the token settings; during integration, check whether Daily's participant permissions can also restrict sending to video only. **[v1.3]**
 - Do not expose privileged Supabase service credentials in frontend code.
 - Validate and authorize all writes to rooms, checklists, status tags, forums, module requests, and catalogue records.
 - Define how users report abuse before a public launch (a full reporting workflow remains open).
@@ -291,7 +301,7 @@ No numeric latency, uptime, or realtime SLOs are specified.
 | S01 | Authentication — Sign up / Log in | Student and admin | Create an account or sign in; entry to password reset | FR-AUTH-01, 02, 07 |
 | S08 | Password reset — Request / Set new password | Student and admin | Request a reset email; set a new password from the emailed link | FR-AUTH-07 |
 | S02 | Student module profile | Student | Select institution and active modules; submit module requests inline | FR-MOD-01, 02, 07 |
-| S03 | Module room discovery | Student | Discover rooms for selected modules and see availability against the 20-person limit | FR-MOD-03, 04, FR-ROOM-02, 03 |
+| S03 | Module room discovery | Student | Discover open rooms for selected modules and see availability against the 20-person limit; open closed rooms' checklists | FR-MOD-03, 04, FR-ROOM-02, 03, 13 |
 | S04 | Silent study room | Student (timer and close-room controls for admin) | Video-only study with synchronized timer, status tags, shared checklist | FR-ROOM-01–12, FR-TIMER-01–05, FR-STATUS-01–03, FR-CHECK-01–06 |
 | S05 | Module forum / noticeboard | Student and admin | View and create text posts; edit own posts | FR-FORUM-01–03, 05–07 |
 | S06 | Admin module catalogue management | Admin | Create, edit, verify, archive/delete institution and module records; review module requests; create and close rooms | FR-MOD-05–09, FR-ROOM-09, 11 |
@@ -338,24 +348,26 @@ All screens are designed responsively for mobile and desktop in a single theme a
 - Each result shows module identifier, participant occupancy out of 20, and Join room when a seat is available. Rooms are open or full; there is no scheduled state in the MVP. **[v1.2]**
 - A 20/20 room is visibly unavailable; no waitlist or alternative-room recommendation.
 - Room rules (silent, video only) are shown before joining.
+- A secondary "Closed rooms" section below the open rooms lists closed rooms for the student's modules. Each row shows the module, a "Closed" badge, and a "View checklist" action; there is no join action. Empty label: "No closed rooms yet." **[v1.3]**
 - Empty message when no rooms exist; no create-room action for students. Loading placeholders; Error; Offline (occupancy marked as last-known); Success transitions into S04 after the backend confirms the join.
 
 #### S04 — Silent study room
 
 - Module identifier and occupancy (n/20); responsive video-tile grid of at most 20 tiles; no microphone controls; low-bandwidth 240p/360p.
 - Prominent synchronized timer with phase (Focus/Break) and remaining time; default 50/10. Timer controls (start, pause, reset, advance) appear only for admins; participants see it read-only. **[v1.2]**
-- Study-status tags on tiles; a participant edits their own status.
+- Study-status tags on tiles; a participant edits their own status (1 to 60 characters, counter shown, long tags truncated with an ellipsis). **[v1.3]**
 - Shared checklist with item text, complete/incomplete control, and composer. Edit/delete controls appear on a participant's own items; admins see them on all items. **[v1.2]**
 - Camera-denied/unavailable state: understandable message and a placeholder tile. No reporting action and no camera toggle policy in the MVP. **[v1.2]**
 - Admin controls: timer controls and Close room (confirmation dialog). No remove-participant action. **[v1.2]**
 - Layout details in Section 8.3.
+- Closed room **[v1.3]**: the room route shows a "This room is closed" notice with the checklist in read-only mode (no video, no timer controls, no composer, no edit/delete, no completion toggles) and a link back to room discovery. This is also the view opened from "Closed rooms" on S03.
 - Empty, Loading, Error (join failure, video failure, loading failure, rejected capacity request, room closed), Offline ("Connection lost…"; no queued offline edits), Success, and Full-room (20/20, no join action, no waitlist) states.
 
 #### S05 — Module forum / noticeboard
 
 - Module identifier; list of posts with author, text content, edited indicator where applicable, and pinned distinction.
 - Composer with post body and Publish action. Posts are text-only. **[v1.2]**
-- Every user can edit their own post. Students cannot remove others' posts.
+- Every user can edit their own post. Edited posts show an "Edited" label only (no edit history). Students cannot remove others' posts. **[v1.3]**
 - No comments, reactions, direct messages, polls, or attachments.
 - Empty, Loading, Error, Offline (new posts not confirmed and not queued), Success (published post and real-time pin updates).
 - When shown inside the room (desktop right drawer / mobile segmented switch), it is the same module forum, not an in-room chat.
@@ -433,7 +445,7 @@ Keep wording consistent across screens:
 | Module identifier | Institution/module context | Module codes such as `MAT2611` | S02–S07 |
 | Room result item | Discoverable study room | Module, occupancy / 20, join availability | S03 |
 | Participant video tile | Live participant | Video area (or placeholder if camera unavailable), identity label if available, status tag; no audio control | S04 |
-| Participant status tag | Current study focus | Live update | S04 |
+| Participant status tag | Current study focus | Live update; 1 to 60 characters, truncated with an ellipsis **[v1.3]** | S04 |
 | Pomodoro timer | Shared focus/break state | Phase, remaining time, 50/10 default; controls for admin only | S04 |
 | Shared checklist item | Session milestone | Text, complete/incomplete control, owner/admin edit and delete | S04 |
 | Checklist composer | Add milestone | Text entry and add action | S04 |
@@ -454,6 +466,28 @@ Keep wording consistent across screens:
 - Every visible control must correspond to a requirement or confirmed decision.
 - No microphone controls in study rooms; never more than 20 participant tiles.
 - Sample data in mock-ups is limited to examples listed in this PRD and marked as illustrative.
+
+### 8.7 Motion and performance rules **[v1.3]**
+
+Motion exists only to confirm an action or show that something is loading. Everything here is a target for implementation and QA, not a service-level objective.
+
+**Motion**
+
+- Duration 120 to 200 ms for hover, focus, toggles, segmented switch, and dialog open/close; ease-out. Drawer slide at most 200 ms.
+- Animate only `opacity` and `transform`. Never animate `width`, `height`, `top`, `left`, or `margin`, so nothing causes layout reflow.
+- No animation on video tiles, the video grid, or the timer digits. The timer updates its text once per second using tabular numerals so the layout never shifts. A progress bar, if shown, uses `transform: scaleX`.
+- Realtime arrivals (new checklist item, forum post, pin) fade in over at most 150 ms and are never animated into a new position; the list does not reorder.
+- Loading: skeleton placeholders reserve the final layout and appear only if loading takes longer than about 150 ms (avoids flicker). Spinners are a simple rotation; skeleton shimmer is a slow opacity pulse.
+- No page-transition animation, parallax, celebration effects, or animation libraries. CSS transitions only.
+- `prefers-reduced-motion: reduce`: remove all transitions except opacity at 100 ms or less; replace spinners with a static icon plus text.
+
+**Responsiveness and performance**
+
+- Every control shows a pending state within 100 ms of interaction. Success is shown only after backend confirmation (Section 8.5), so there are no optimistic writes.
+- Avoid layout shift: reserve space for images, skeletons, and the timer; target Cumulative Layout Shift below 0.1.
+- Split the frontend by route. The video SDK loads only on the room route and is not part of the initial bundle.
+- The timer is driven by a server-provided phase end time. Clients derive remaining time locally from that value and a measured clock offset, so there is no per-second network traffic and late joiners are correct immediately.
+- Subscribe to realtime channels only for the screen in view and unsubscribe when leaving it. Video tiles request lower-quality layers for small tiles (Daily receive settings) to save bandwidth.
 
 ## 9. Design values and visual constraints
 
@@ -489,10 +523,15 @@ Keep wording consistent across screens:
 | Mobile and desktop navigation | As defined in Section 8.3 |
 | Exact system-message copy | Principles in Section 8.5; provisional strings from the Stitch prompts |
 
-### 9.3 Design values still to be finalized
+### 9.3 Additional design decisions **[v1.3]**
 
-- Motion and animation rules.
-- Tagline and illustration/photography direction (none unless later approved).
+| Decision | Resolution |
+|---|---|
+| Motion and animation | Functional and short; rules in Section 8.7 |
+| Tagline | None |
+| Illustration and photography | None. Empty and error states use a Lucide icon plus short text |
+
+No design values remain open.
 
 The style guide's tokens should be exported into `docs/designs/` so implementation can reference one source of truth.
 
@@ -506,7 +545,7 @@ The style guide's tokens should be exported into `docs/designs/` so implementati
 | Authentication | Supabase Auth (email/password, password reset) |
 | Database authorization | Supabase Row-Level Security |
 | Realtime | Supabase Realtime for checklists, room presence, timer state, and forum updates |
-| Video | WebRTC SDK; Daily.co or LiveKit, to be chosen by the product owner |
+| Video | WebRTC via Daily.co (`@daily-co/daily-js` and `@daily-co/daily-react` on the frontend; Daily REST API from the backend for rooms and meeting tokens); chosen by the product owner **[v1.3]** |
 | CI | GitHub Actions: lint, typecheck, test, build |
 
 ### 10.1 Architectural principles
@@ -532,7 +571,7 @@ These are logical entities, not a finalized schema.
 | Room participant / presence | Current participation | Links user and room |
 | Study status | Participant's current status tag | Links participant and room |
 | Timer state | Authoritative focus/break state | Belongs to a room |
-| Checklist item | Milestone, completion state, creator (for edit/delete rules) | Belongs to a room; persists with the room |
+| Checklist item | Milestone, completion state, creator, `created_at` (ordering) | Belongs to a room; persists with the room and stays readable (read-only) after the room is closed **[v1.3]** |
 | Forum post | Text discussion, schedule update, or notice; edited timestamp | Belongs to a module and author |
 | Announcement pin | Pinned post state | Links an admin action to a post |
 
@@ -566,7 +605,10 @@ The MVP is ready for release when:
 - [ ] Video tiles are configured for the intended low-bandwidth quality.
 - [ ] Room presence and participant status tags update in real time.
 - [ ] The 50/10 timer is synchronized; only admins can control it.
-- [ ] Shared checklist additions and completion changes synchronize in real time, persist with the room, and follow ownership/admin edit rules.
+- [ ] Shared checklist additions and completion changes synchronize in real time, persist with the room, are listed in creation order, and follow ownership/admin edit rules.
+- [ ] A closed room's checklist remains viewable read-only by module members and cannot be changed. **[v1.3]**
+- [ ] Edited forum posts show an "Edited" label; status tags are limited to 60 characters. **[v1.3]**
+- [ ] Motion follows Section 8.7 and respects reduced-motion settings. **[v1.3]**
 - [ ] Module forums support text posts, schedule updates, and editing of own posts.
 - [ ] Admins can pin announcements and remove any post.
 - [ ] Confirmation dialogs appear for post removal, catalogue record deletion, and room closure.
@@ -579,18 +621,17 @@ The MVP is ready for release when:
 
 ## 14. Open decisions and unresolved requirements
 
-1. **Video provider:** The product owner will choose Daily.co or LiveKit (needed before Phase 3 video work).
+1. **Video provider:** Daily.co is chosen (Section 10). Two technical checks remain for integration: whether participant permissions can restrict sending to video only, and which send settings give 240p/360p.
 2. **Room join concurrency:** Exact transaction/locking approach for the 20-seat limit.
 3. **Admin provisioning:** Who can grant or revoke the `admin` role, and how.
 4. **Timer operation with admin-only controls:** With only admins controlling the timer, a room has no running timer unless an admin is present. This is accepted for the MVP; consider an auto-start cycle in v2.
-5. **Room closure:** Whether closing a room deletes its checklist or archives it (the checklist persists with the room in the meantime).
-6. **Checklist details:** Item ordering, and handling of items created by participants who have since left.
-7. **Status tags:** Length limits and validation rules.
-8. **DHET catalogue source:** The exact source and format of the DHET registered-institution list, and refresh process.
-9. **Abuse reporting:** User reporting and escalation workflows beyond admin moderation.
-10. **Analytics:** Event tracking and calculation rules for retention and study-minute metrics.
-11. **Deployment providers:** Frontend/backend hosting.
-12. **Test accounts:** Safe process for creating student and admin demo accounts.
+5. **DHET catalogue source:** The exact source and format of the DHET registered-institution list, and refresh process.
+6. **Abuse reporting:** User reporting and escalation workflows beyond admin moderation.
+7. **Analytics:** Event tracking and calculation rules for retention and study-minute metrics.
+8. **Deployment providers:** Frontend/backend hosting.
+9. **Test accounts:** Safe process for creating student and admin demo accounts.
+
+**Resolved in v1.3:** motion rules, tagline and illustrations, edited-post label, checklist ordering, status-tag length, closed-room checklist behaviour, video provider (Daily.co).
 
 **Deferred to v2 (decisions to revisit then):** how camera-on is detected and enforced and how issues are reported; room-moderator nomination and revocation; scheduled rooms and session expiry; attachment file types and size limits; dark mode.
 
@@ -620,7 +661,14 @@ The MVP is ready for release when:
 | 21 | Post removal | Admins can remove any post, in addition to pinning |
 | 22 | System messages | Consistent wording principles (Section 8.5) |
 | 23 | Confirmation dialogs | Remove post, delete catalogue record, close active room; **remove-participant dialog deferred with kicking (v1.2)** |
+| 24 | Motion and animation | Functional, 120 to 200 ms, `opacity`/`transform` only, reduced-motion respected (Section 8.7) |
+| 25 | Tagline and illustration | None; Lucide icon plus short text in empty states |
+| 26 | Edited posts | "Edited" label only; no edit history |
+| 27 | Checklist ordering | Creation order, oldest first; items do not move when completed |
+| 28 | Status tag limit | 1 to 60 characters, plain text, trimmed; empty clears the status |
+| 29 | Closed-room checklist | Retained and readable read-only by module members; closed rooms listed under "Closed rooms" on discovery |
+| 30 | Video provider | Daily.co, chosen by the product owner |
 
 ## 16. Source alignment
 
-This PRD is based on the supplied **Business Plan & MVP Specification: StudySync** and the product owner's answers to the Stitch design questions. Business scope, users, metrics, Day 1 feature groups, stack, and milestone dates come from the source. Items marked **[v1.2]** reflect the product owner's decision to defer four feature areas to v2 and keep the MVP lightweight. Logical data entities, acceptance criteria, and open questions are structured elaborations to make the product implementable.
+This PRD is based on the supplied **Business Plan & MVP Specification: StudySync** and the product owner's answers to the Stitch design questions. Business scope, users, metrics, Day 1 feature groups, stack, and milestone dates come from the source. Items marked **[v1.2]** reflect the product owner's decision to defer four feature areas to v2 and keep the MVP lightweight. Items marked **[v1.3]** resolve the remaining design questions and select the video provider. Logical data entities, acceptance criteria, and open questions are structured elaborations to make the product implementable.
