@@ -3,6 +3,7 @@ import cors from "cors";
 import { institutionsRouter, modulesRouter } from "./modules/modules/modulesRouter.js";
 import { roomsRouter } from "./modules/rooms/roomsRouter.js";
 import { forumRouter } from "./modules/forum/forumRouter.js";
+import { requireAuth } from "./middleware/auth.js";
 
 export function createApp() {
   const app = express();
@@ -17,6 +18,16 @@ export function createApp() {
 
   app.get("/health", (_request, response) => {
     response.json({ status: "ok" });
+  });
+
+  // Current user profile (role lookup used by the frontend)
+  app.get("/api/profile", requireAuth, (req, res) => {
+    res.json({
+      id: req.user?.id,
+      email: req.user?.email,
+      role: req.user?.role ?? "student",
+      institution_type: req.user?.institution_type ?? null,
+    });
   });
 
   app.use("/api/institutions", institutionsRouter);

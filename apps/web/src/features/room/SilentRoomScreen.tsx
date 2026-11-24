@@ -9,7 +9,6 @@ import {
   Plus,
   ShieldCheck,
   Video,
-  WifiOff,
   X,
 } from "lucide-react";
 import {
@@ -37,7 +36,6 @@ type Participant = {
 type SilentRoomScreenProps = {
   roomId: string;
   isClosed: boolean;
-  onDiscover: () => void;
   onForum: () => void;
   onUnavailable: (message: string) => void;
 };
@@ -51,36 +49,15 @@ const participants: Participant[] = [
   { name: "Nandi Z.", status: "Studying quietly" },
 ];
 
-const initialChecklist: ChecklistItem[] = [
-  {
-    id: "task-1",
-    text: "Complete practice questions 1–4",
-    owner: "You",
-    complete: true,
-  },
-  {
-    id: "task-2",
-    text: "Verify Gaussian elimination on problem set 4",
-    owner: "Sipho M.",
-    complete: false,
-  },
-  {
-    id: "task-3",
-    text: "Review section 1.4 proofs",
-    owner: "You",
-    complete: false,
-  },
-];
-
 function SilentRoomScreen({
   roomId,
   isClosed,
-  onDiscover,
   onForum,
   onUnavailable,
 }: SilentRoomScreenProps) {
   const [studyStatus, setStudyStatus] = useState("Chapter 1 review");
-  const [checklist, setChecklist] = useState(initialChecklist);
+  const [statusSaved, setStatusSaved] = useState(false);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [newTask, setNewTask] = useState("");
   const [timerMinutes, setTimerMinutes] = useState(50);
   const moduleCode = roomId.toLowerCase().includes("cos")
@@ -103,7 +80,7 @@ function SilentRoomScreen({
             items.map((i) => ({
               id: i.id,
               text: i.title,
-              owner: i.profiles?.full_name || "Participant",
+              owner: i.profiles?.full_name ?? "Participant",
               complete: i.is_completed,
             }))
           );
@@ -122,8 +99,15 @@ function SilentRoomScreen({
       )
     );
 
-    apiToggleChecklist(roomId, itemId, nextState).catch(() => {});
-    onUnavailable("Preview only: checklist changes are not saved to the room.");
+    apiToggleChecklist(roomId, itemId, nextState).catch(() => {
+      // revert on failure
+      setChecklist((currentItems) =>
+        currentItems.map((i) =>
+          i.id === itemId ? { ...i, complete: !nextState } : i
+        )
+      );
+      onUnavailable("Failed to save checklist change.");
+    });
   }
 
   function submitChecklistItem(event: FormEvent<HTMLFormElement>) {
@@ -144,15 +128,20 @@ function SilentRoomScreen({
         setNewTask("");
       })
       .catch(() => {
-        onUnavailable("Checklist updates are unavailable until the room service is connected.");
+        onUnavailable("Failed to add checklist item. Is the room still open?");
       });
   }
 
   function submitStudyStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     updateStudyStatus(roomId, studyStatus)
-      .catch(() => {});
-    onUnavailable("Your study status is only a preview and has not been shared.");
+      .then(() => {
+        setStatusSaved(true);
+        setTimeout(() => setStatusSaved(false), 2000);
+      })
+      .catch(() => {
+        onUnavailable("Failed to update study status.");
+      });
   }
 
   function closedRoomView() {
@@ -177,108 +166,94 @@ function SilentRoomScreen({
             </div>
             <span className="closed-badge">Closed</span>
           </div>
-          <ul className="room-checklist read-only-checklist">
-            {checklist.map((item) => (
-              <li className="checklist-item" key={item.id}>
-                <span
-                  className={`check-indicator${item.complete ? " is-complete" : ""}`}
-                  aria-hidden="true"
-                >
-                  {item.complete && <Check size={13} />}
-                </span>
-                <span className={item.complete ? "task-complete" : ""}>
-                  {item.text}
-                </span>
-                <small>Added by {item.owner}</small>
-              </li>
-            ))}
-          </ul>
+          {checklist.length === 0 ? (
+            <p className="panel-helper">No checklist items for this room.</p>
+          ) : (
+            <ul className="room-checklist">
+              {checklist.map((item) => (
+                <li className="checklist-item" key={item.id}>
+                  <input
+                    type="checkbox"
+                    checked={item.complete}
+                    readOnly
+                    aria-label={`${item.text} — ${item.complete ? "complete" : "incomplete"}`}
+                  />
+                  <span className={item.complete ? "task-complete" : ""}>
+                    {item.text}
+                    <small>Added by {item.owner}</small>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
-
-        <button className="secondary-button action-button" onClick={onDiscover}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          Back to room discovery
-        </button>
       </div>
     );
   }
 
   function activeRoomView() {
     return (
-      <div className="room-screen-grid">
-        <div className="room-stage-column">
-          <section className="video-stage" aria-label="Video-only participant tiles">
-            <div className="video-stage-header">
-              <span className="live-indicator">
-                <span aria-hidden="true" />
-                Preview room
-              </span>
-              <span className="video-quality">Low-bandwidth video</span>
-            </div>
-            <div className="participant-grid">
-              {participants.map((participant) => (
-                <article
-                  className={`participant-tile${participant.currentUser ? " is-current-user" : ""}${participant.cameraUnavailable ? " is-camera-unavailable" : ""}`}
-                  key={participant.name}
-                >
-                  {participant.cameraUnavailable ? (
-                    <div className="camera-placeholder">
-                      <CameraOff size={23} aria-hidden="true" />
-                      <strong>Camera unavailable</strong>
-                      <span>Video placeholder</span>
-                    </div>
-                  ) : (
-                    <div className="participant-video-placeholder">
-                      <span className="participant-initials" aria-hidden="true">
-                        {participant.name === "You"
-                          ? "Y"
-                          : participant.name
-                              .split(" ")
-                              .map((part) => part[0])
-                              .join("")}
-                      </span>
-                    </div>
-                  )}
-                  <div className="participant-caption">
-                    <span>{participant.name}</span>
-                    {participant.status && (
-                      <small title={participant.status}>{participant.status}</small>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-            <div className="stage-footnote">
-              <Video size={15} aria-hidden="true" />
-              Video only · Microphones are disabled
-            </div>
+      <div className="room-layout">
+        <div className="room-main">
+          <section className="participant-grid" aria-label="Participant video feeds">
+            {participants.map((p, i) => (
+              <div
+                className={`participant-feed${p.currentUser ? " is-current-user" : ""}${p.cameraUnavailable ? " camera-off" : ""}`}
+                key={i}
+              >
+                {p.cameraUnavailable ? (
+                  <>
+                    <CameraOff size={20} aria-hidden="true" />
+                    <span>Camera unavailable</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="participant-name">{p.name}</span>
+                    <span className="participant-status">{p.status}</span>
+                  </>
+                )}
+              </div>
+            ))}
           </section>
 
-          <form className="study-status-form" onSubmit={submitStudyStatus}>
-            <label htmlFor="study-status">Your study status</label>
-            <div className="study-status-controls">
+          <section className="status-composer" aria-labelledby="status-heading">
+            <div className="section-heading">
+              <div>
+                <h2 id="status-heading">Your study status</h2>
+                <p>Shared with everyone in the room</p>
+              </div>
+              <Pencil size={16} aria-hidden="true" />
+            </div>
+            <form className="status-form" onSubmit={submitStudyStatus}>
+              <label className="visually-hidden" htmlFor="study-status">
+                Study status
+              </label>
               <input
                 id="study-status"
                 value={studyStatus}
-                onChange={(event) =>
-                  setStudyStatus(event.target.value.slice(0, 60))
-                }
+                onChange={(event) => setStudyStatus(event.target.value.slice(0, 60))}
+                placeholder="What are you working on?"
                 maxLength={60}
               />
-              <span>{studyStatus.length}/60</span>
-              <button
-                className="secondary-button"
-                type="submit"
-                disabled={!studyStatus.trim()}
-              >
-                Save status
+              <button className="primary-button" type="submit" disabled={statusSaved}>
+                {statusSaved ? (
+                  <>
+                    <Check size={15} aria-hidden="true" />
+                    Saved!
+                  </>
+                ) : (
+                  <>
+                    <Video size={15} aria-hidden="true" />
+                    Update status
+                  </>
+                )}
               </button>
-            </div>
-          </form>
+            </form>
+          </section>
         </div>
 
-        <aside className="room-side-panel">
-          <section className="timer-card" aria-labelledby="timer-heading">
+        <aside className="room-sidebar">
+          <section className="timer-panel" aria-labelledby="timer-heading">
             <div className="timer-header">
               <div>
                 <p className="eyebrow">Focus phase</p>
@@ -291,10 +266,6 @@ function SilentRoomScreen({
               <span>Focus block</span>
               <span>10 min break</span>
             </div>
-            <p className="timer-preview-note">
-              <WifiOff size={14} aria-hidden="true" />
-              Preview timer · not synchronized
-            </p>
           </section>
 
           <section className="checklist-panel" aria-labelledby="checklist-heading">
@@ -328,7 +299,7 @@ function SilentRoomScreen({
                         aria-label={`Edit ${item.text}`}
                         onClick={() =>
                           onUnavailable(
-                            "Checklist editing is unavailable until the room service is connected.",
+                            "Checklist editing is not yet available.",
                           )
                         }
                       >
@@ -339,7 +310,7 @@ function SilentRoomScreen({
                         aria-label={`Delete ${item.text}`}
                         onClick={() =>
                           onUnavailable(
-                            "Checklist deletion is unavailable until the room service is connected.",
+                            "Checklist deletion is not yet available.",
                           )
                         }
                       >
@@ -370,7 +341,6 @@ function SilentRoomScreen({
                 <Plus size={16} aria-hidden="true" />
               </button>
             </form>
-            <p className="panel-helper">Preview only; task changes are not saved.</p>
           </section>
 
           <button className="forum-shortcut" onClick={onForum}>
@@ -397,7 +367,7 @@ function SilentRoomScreen({
           </p>
         </div>
         <span className={isClosed ? "closed-badge" : "preview-chip"}>
-          {isClosed ? "Closed" : "Preview room"}
+          {isClosed ? "Closed" : "Live"}
         </span>
       </header>
 

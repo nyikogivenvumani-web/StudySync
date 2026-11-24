@@ -4,42 +4,82 @@ import {
   BookOpenCheck,
   Eye,
   EyeOff,
+  LogOut,
   User,
 } from "lucide-react";
 import { NAV_ITEMS } from "./lib/navigation.js";
 import { supabase } from "./lib/supabase.js";
+import type { Session } from "@supabase/supabase-js";
 import AdminCatalogueScreen from "./features/admin/AdminCatalogueScreen.js";
 import ForumModerationScreen from "./features/admin/ForumModerationScreen.js";
 import DiscoverScreen from "./features/discover/DiscoverScreen.js";
 import ProfileScreen from "./features/profile/ProfileScreen.js";
 import ForumScreen from "./features/forum/ForumScreen.js";
-import { INITIAL_FORUM_POSTS, type ForumPost } from "./features/forum/forumData.js";
 import SilentRoomScreen from "./features/room/SilentRoomScreen.js";
 
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+
 type AuthMode = "login" | "signup";
-type PreviewRole = "student" | "admin";
+
+async function fetchUserRole(session: Session): Promise<"student" | "admin"> {
+  try {
+    const res = await fetch(`${API_BASE}/api/profile`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) return "student";
+    const data = (await res.json()) as { role?: string };
+    return data.role === "admin" ? "admin" : "student";
+  } catch {
+    return "student";
+  }
+}
 
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [notice, setNotice] = useState("");
-  const [previewRole, setPreviewRole] = useState<PreviewRole>("student");
-  const [forumPosts, setForumPosts] =
-    useState<ForumPost[]>(INITIAL_FORUM_POSTS);
+  const [session, setSession] = useState<Session | null>(null);
+  const [userRole, setUserRole] = useState<"student" | "admin">("student");
+  const [userEmail, setUserEmail] = useState("");
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+
   const isPasswordReset = pathname === "/reset-password";
   const isAuthRoute = pathname === "/" || isPasswordReset;
-  const [selectedModules, setSelectedModules] = useState([
-    "MAT2611",
-    "COS1511",
-  ]);
+
+  // Restore session on load + subscribe to auth changes
+  useEffect(() => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => {
+      const s = data.session;
+      setSession(s);
+      if (s) {
+        setUserEmail(s.user.email ?? "");
+        fetchUserRole(s).then(setUserRole);
+        if (window.location.pathname === "/") navigate("/discover");
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      if (s) {
+        setUserEmail(s.user.email ?? "");
+        fetchUserRole(s).then(setUserRole);
+      } else {
+        setUserRole("student");
+        setUserEmail("");
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => {
       setPathname(window.location.pathname);
       setNotice("");
     };
-
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
@@ -58,11 +98,7 @@ function App() {
     const password = formData.get("password") as string;
 
     if (!supabase) {
-      setNotice(
-        isPasswordReset
-          ? "Password recovery is not available until Supabase Auth is connected."
-          : "Authentication is not connected yet. Connect Supabase Auth to continue."
-      );
+      setNotice("Authentication is not connected. Add Supabase keys to .env.");
       return;
     }
 
@@ -76,16 +112,24 @@ function App() {
       } else if (authMode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        navigate("/discover");
+        navigate("/profile");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate("/discover");
+        const role = data.session ? await fetchUserRole(data.session) : "student";
+        navigate(role === "admin" ? "/admin" : "/discover");
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Authentication failed";
       setNotice(message);
     }
+  }
+
+  async function handleSignOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setSession(null);
+    navigate("/");
   }
 
   function selectAuthMode(mode: AuthMode) {
@@ -97,10 +141,15 @@ function App() {
     setNotice(message);
   }
 
+  // Redirect unauthenticated users away from protected routes
+  if (!isAuthRoute && !session && supabase) {
+    navigate("/");
+    return null;
+  }
+
   if (!isAuthRoute) {
     const isAdminRoute = pathname.startsWith("/admin");
-    const isAdminPreview = previewRole === "admin";
-    const hasAdminAccess = isAdminPreview;
+    const hasAdminAccess = userRole === "admin";
     const activeScreen = isAdminRoute
       ? pathname === "/admin/moderation"
         ? "moderation"
@@ -121,7 +170,7 @@ function App() {
           item.id === "profile" ||
           item.id === "admin"),
     );
-    const roomId = pathname.split("/")[2] ?? "preview-room";
+    const roomId = pathname.split("/")[2] ?? "";
     const isClosedRoom = roomId.includes("closed");
     const forumModuleCode = selectedModules[0] ?? "MAT2611";
 
@@ -140,8 +189,8 @@ function App() {
             <span>StudySync</span>
           </a>
           <div className="workspace-context">
-            <span>Preview role</span>
-            <strong>{isAdminPreview ? "Admin preview" : "Student preview"}</strong>
+            <span>Signed in as</span>
+            <strong>{hasAdminAccess ? "Admin" : "Student"}</strong>
           </div>
           <StudentNavigation
             items={navigationItems}
@@ -153,9 +202,17 @@ function App() {
               <User size={17} />
             </span>
             <span>
-              <strong>Preview student</strong>
-              <small>Demo account</small>
+              <strong>{userEmail || "Student"}</strong>
+              <small>{hasAdminAccess ? "Administrator" : "Student"}</small>
             </span>
+            <button
+              className="text-button"
+              onClick={handleSignOut}
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </aside>
 
@@ -170,24 +227,9 @@ function App() {
               </span>
             </div>
             <div className="topbar-actions">
-              <label className="preview-role-control">
-                <span>Preview role</span>
-                <select
-                  aria-label="Preview role"
-                  value={previewRole}
-                  onChange={(event) =>
-                    setPreviewRole(
-                      event.target.value === "admin" ? "admin" : "student",
-                    )
-                  }
-                >
-                  <option value="student">Student</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
               <span className="connection-chip">
-                <span className="connection-dot" aria-hidden="true" />
-                Preview mode
+                <span className="connection-dot is-live" aria-hidden="true" />
+                Live
               </span>
             </div>
           </header>
@@ -205,9 +247,7 @@ function App() {
                 <div>
                   <p className="eyebrow">Admin-only area</p>
                   <h1>You don't have permission to access this page.</h1>
-                  <p>
-                    Switch to the Admin preview role to view these screens.
-                  </p>
+                  <p>Contact an administrator to get admin access.</p>
                 </div>
               </section>
             ) : activeScreen === "admin" ? (
@@ -217,8 +257,8 @@ function App() {
               />
             ) : activeScreen === "moderation" ? (
               <ForumModerationScreen
-                posts={forumPosts}
-                onPostsChange={setForumPosts}
+                posts={[]}
+                onPostsChange={() => {}}
                 onUnavailable={showUnavailableMessage}
                 onCatalogue={() => navigate("/admin")}
               />
@@ -226,43 +266,27 @@ function App() {
               <ProfileScreen
                 selectedModules={selectedModules}
                 onModulesChange={setSelectedModules}
-                onSave={() =>
-                  showUnavailableMessage(
-                    "Preview only: selections have not been saved to your account.",
-                  )
-                }
-                onRequest={() =>
-                  showUnavailableMessage(
-                    "Request not submitted: module requests need the Supabase connection.",
-                  )
-                }
+                onSave={() => {}}
+                onRequest={() => {}}
                 onDiscover={() => navigate("/discover")}
               />
             ) : activeScreen === "discover" ? (
               <DiscoverScreen
                 selectedModules={selectedModules}
                 onEditProfile={() => navigate("/profile")}
-                onJoinRoom={() =>
-                  showUnavailableMessage(
-                    "Room joining is not connected yet. No seat has been reserved.",
-                  )
-                }
-                onViewChecklist={(closedRoomId) =>
-                  navigate(`/room/${closedRoomId}`)
-                }
+                onJoinRoom={(id) => navigate(`/room/${id}`)}
+                onViewChecklist={(id) => navigate(`/room/${id}`)}
               />
             ) : activeScreen === "room" ? (
               <SilentRoomScreen
                 roomId={roomId}
                 isClosed={isClosedRoom}
-                onDiscover={() => navigate("/discover")}
                 onForum={() => navigate("/forum")}
                 onUnavailable={showUnavailableMessage}
               />
             ) : (
               <ForumScreen
                 moduleCode={forumModuleCode}
-                posts={forumPosts}
                 onUnavailable={showUnavailableMessage}
               />
             )}
@@ -295,7 +319,7 @@ function App() {
         {isPasswordReset ? (
           <div className="reset-heading">
             <h1 id="auth-title">Reset your password</h1>
-            <p>Enter your email address and we’ll help you get back in.</p>
+            <p>Enter your email address and we'll help you get back in.</p>
           </div>
         ) : (
           <>

@@ -1,47 +1,94 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
-  AlertCircle,
   BookOpen,
   Check,
   LockKeyhole,
   Pencil,
   Pin,
+  RefreshCw,
   Send,
   ShieldCheck,
 } from "lucide-react";
-import type { ForumPost } from "./forumData.js";
-import { createForumPost } from "../../lib/api.js";
+import { fetchForumPosts, createForumPost, type ForumPost as ApiForumPost } from "../../lib/api.js";
 
 type ForumScreenProps = {
   moduleCode: string;
-  posts: ForumPost[];
   onUnavailable: (message: string) => void;
 };
 
-function ForumScreen({
-  moduleCode,
-  posts,
-  onUnavailable,
-}: ForumScreenProps) {
+type LocalPost = {
+  id: string;
+  author: string;
+  role: "Student" | "Admin";
+  body: string;
+  is_pinned: boolean;
+  edited: boolean;
+  ownedByCurrentUser: boolean;
+  created_at: string;
+};
+
+function toLocalPost(p: ApiForumPost, currentUserId?: string): LocalPost {
+  return {
+    id: p.id,
+    author: p.profiles?.full_name ?? p.author_name ?? "Student",
+    role: "Student",
+    body: p.content,
+    is_pinned: p.is_pinned,
+    edited: !!p.edited_at,
+    ownedByCurrentUser: !!currentUserId && p.author_id === currentUserId,
+    created_at: p.created_at,
+  };
+}
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
+  return `${Math.floor(diff / 86400)} d ago`;
+}
+
+function ForumScreen({ moduleCode, onUnavailable }: ForumScreenProps) {
+  const [posts, setPosts] = useState<LocalPost[]>([]);
   const [draft, setDraft] = useState("");
-  const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
-  const modulePosts = posts.filter((post) => post.moduleCode === moduleCode);
+  const [editingPost, setEditingPost] = useState<LocalPost | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  function loadPosts() {
+    setLoading(true);
+    setError("");
+    fetchForumPosts(moduleCode)
+      .then((data) => {
+        setPosts(data.map((p) => toLocalPost(p)));
+      })
+      .catch(() => setError("Could not load forum posts."))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (moduleCode) loadPosts();
+  }, [moduleCode]);
 
   function submitPost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.trim()) return;
 
-    createForumPost(moduleCode, draft.trim()).catch(() => {});
-    onUnavailable(
-      editingPost
-        ? "Edit not saved: the module forum is not connected yet."
-        : "Post not published: the module forum is not connected yet.",
-    );
-    setDraft("");
-    setEditingPost(null);
+    setSubmitting(true);
+    createForumPost(moduleCode, draft.trim())
+      .then((post) => {
+        setPosts((prev) => [toLocalPost(post), ...prev]);
+        setDraft("");
+        setEditingPost(null);
+      })
+      .catch(() => {
+        onUnavailable("Failed to publish post. Is the API running?");
+      })
+      .finally(() => setSubmitting(false));
   }
 
-  function startEditing(post: ForumPost) {
+  function startEditing(post: LocalPost) {
     setEditingPost(post);
     setDraft(post.body);
   }
@@ -61,16 +108,13 @@ function ForumScreen({
             Share text-only study notices and module updates.
           </p>
         </div>
-        <span className="preview-chip">Preview data</span>
       </header>
 
-      <section className="preview-banner" role="status">
-        <AlertCircle size={18} aria-hidden="true" />
-        <p>
-          Sample posts only. Publishing, editing, and live updates are not
-          connected to the forum service.
-        </p>
-      </section>
+      {error && (
+        <section className="preview-banner" role="alert">
+          <p>{error}</p>
+        </section>
+      )}
 
       <div className="forum-layout">
         <div className="forum-feed">
@@ -125,10 +169,14 @@ function ForumScreen({
                   <button
                     className="primary-button action-button"
                     type="submit"
-                    disabled={!draft.trim()}
+                    disabled={!draft.trim() || submitting}
                   >
                     <Send size={15} aria-hidden="true" />
-                    {editingPost ? "Save changes" : "Publish notice"}
+                    {submitting
+                      ? "Publishing…"
+                      : editingPost
+                        ? "Save changes"
+                        : "Publish notice"}
                   </button>
                 </div>
               </div>
@@ -136,10 +184,14 @@ function ForumScreen({
           </section>
 
           <section className="forum-post-list" aria-label="Module forum posts">
-            {modulePosts.length > 0 ? (
-              modulePosts.map((post) => (
+            {loading ? (
+              <p className="panel-helper">
+                <RefreshCw size={14} aria-hidden="true" /> Loading posts…
+              </p>
+            ) : posts.length > 0 ? (
+              posts.map((post) => (
                 <article
-                  className={`forum-post${post.pinned ? " is-pinned" : ""}`}
+                  className={`forum-post${post.is_pinned ? " is-pinned" : ""}`}
                   key={post.id}
                 >
                   <header className="forum-post-header">
@@ -159,13 +211,13 @@ function ForumScreen({
                       <strong>{post.author}</strong>
                       <span className="author-role">{post.role}</span>
                       <small>
-                        {post.age}
+                        {timeAgo(post.created_at)}
                         {post.edited && (
                           <span className="edited-label">Edited</span>
                         )}
                       </small>
                     </div>
-                    {post.pinned && (
+                    {post.is_pinned && (
                       <span className="pinned-label">
                         <Pin size={14} aria-hidden="true" />
                         Pinned notice
@@ -185,7 +237,7 @@ function ForumScreen({
                   <p className="forum-post-body">{post.body}</p>
                   <footer className="forum-post-footer">
                     <span>
-                      {post.pinned ? "Official module notice" : "Module post"}
+                      {post.is_pinned ? "Official module notice" : "Module post"}
                     </span>
                     <span className="text-only-label">
                       <Check size={13} aria-hidden="true" />
@@ -196,7 +248,7 @@ function ForumScreen({
               ))
             ) : (
               <div className="empty-inline">
-                <p>No posts for this module yet.</p>
+                <p>No posts for this module yet. Be the first to post!</p>
               </div>
             )}
           </section>
@@ -225,17 +277,6 @@ function ForumScreen({
                 No comments, reactions, or chat threads
               </span>
             </div>
-          </section>
-
-          <section className="workspace-card forum-preview-status">
-            <div className="section-heading">
-              <h2>Connection status</h2>
-              <span className="status-chip status-pending">Preview</span>
-            </div>
-            <p>
-              Forum posts are sample content. Your draft will remain on this
-              screen and will not be shared.
-            </p>
           </section>
         </aside>
       </div>

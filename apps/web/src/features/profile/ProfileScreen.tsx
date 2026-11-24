@@ -9,13 +9,6 @@ type ModuleOption = {
   peers?: number;
 };
 
-type ModuleRequest = {
-  code: string;
-  title: string;
-  institution: string;
-  status: "Pending" | "Approved" | "Rejected";
-};
-
 type ProfileScreenProps = {
   selectedModules: string[];
   onModulesChange: (modules: string[]) => void;
@@ -23,48 +16,6 @@ type ProfileScreenProps = {
   onRequest: () => void;
   onDiscover: () => void;
 };
-
-const moduleOptions: ModuleOption[] = [
-  {
-    code: "MAT2611",
-    title: "Linear Algebra II & Matrix Methods",
-    subject: "Mathematics",
-    peers: 14,
-  },
-  {
-    code: "COS1511",
-    title: "Introduction to Programming I",
-    subject: "Computer Science",
-    peers: 28,
-  },
-  {
-    code: "ECS1501",
-    title: "Economics IA: Microeconomics",
-    subject: "Economics",
-    peers: 9,
-  },
-];
-
-const sampleRequests: ModuleRequest[] = [
-  {
-    code: "MATH-201",
-    title: "Linear Algebra & Matrix Theory",
-    institution: "Preview University",
-    status: "Pending",
-  },
-  {
-    code: "BIO-110",
-    title: "Molecular & Cellular Biology",
-    institution: "Preview University",
-    status: "Approved",
-  },
-  {
-    code: "ARCH-09",
-    title: "Introduction to Spatial Design",
-    institution: "Preview College",
-    status: "Rejected",
-  },
-];
 
 function ProfileScreen({
   selectedModules,
@@ -75,7 +26,10 @@ function ProfileScreen({
 }: ProfileScreenProps) {
   const [institution, setInstitution] = useState("");
   const [institutionList, setInstitutionList] = useState<{ id: string; name: string }[]>([]);
-  const [availableModules, setAvailableModules] = useState<ModuleOption[]>(moduleOptions);
+  const [availableModules, setAvailableModules] = useState<ModuleOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [requestStatus, setRequestStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
 
   useEffect(() => {
     fetchInstitutions()
@@ -84,11 +38,13 @@ function ProfileScreen({
   }, []);
 
   useEffect(() => {
-    fetchModules(institution)
+    setLoading(true);
+    fetchModules(institution || undefined)
       .then((mods) => {
-        if (mods.length > 0) setAvailableModules(mods);
+        setAvailableModules(mods);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [institution]);
 
   function toggleModule(code: string) {
@@ -98,20 +54,36 @@ function ProfileScreen({
     onModulesChange(updatedModules);
   }
 
+  function handleSave() {
+    setSaveStatus("saved");
+    onSave();
+    setTimeout(() => setSaveStatus("idle"), 2000);
+  }
+
   function handleRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
     const code = formData.get("moduleCode") as string;
     const title = formData.get("moduleTitle") as string;
-    if (code) {
-      submitModuleRequest({
-        code,
-        title,
-        institution_type: institution || "University",
-      }).catch(() => {});
-    }
-    onRequest();
+    if (!code) return;
+
+    setRequestStatus("submitting");
+    submitModuleRequest({
+      code,
+      title,
+      institution_type: institution || "University",
+    })
+      .then(() => {
+        setRequestStatus("done");
+        form.reset();
+        setTimeout(() => setRequestStatus("idle"), 3000);
+        onRequest();
+      })
+      .catch(() => {
+        setRequestStatus("error");
+        setTimeout(() => setRequestStatus("idle"), 3000);
+      });
   }
 
   return (
@@ -125,16 +97,7 @@ function ProfileScreen({
             discovery.
           </p>
         </div>
-        <span className="preview-chip">Preview data</span>
       </header>
-
-      <section className="preview-banner" role="status">
-        <BookOpen size={18} aria-hidden="true" />
-        <p>
-          Sample catalogue and request data only. Supabase is not connected, so
-          your changes will not be saved or submitted.
-        </p>
-      </section>
 
       <section className="workspace-card" aria-labelledby="institution-heading">
         <div className="section-heading">
@@ -142,15 +105,14 @@ function ProfileScreen({
             <h2 id="institution-heading">Registered institution</h2>
             <p>Select the institution where you are enrolled.</p>
           </div>
-          <span className="catalogue-label">DHET catalogue pending</span>
         </div>
         <label className="form-field">
-          <span>Institution</span>
+          <span>Institution type</span>
           <select
             value={institution}
             onChange={(event) => setInstitution(event.target.value)}
           >
-            <option value="">Select an institution</option>
+            <option value="">All institutions</option>
             {institutionList.length > 0 ? (
               institutionList.map((inst) => (
                 <option value={inst.id} key={inst.id}>
@@ -173,48 +135,56 @@ function ProfileScreen({
             <h2 id="modules-heading">Active modules</h2>
             <p>Select the modules you are currently studying.</p>
           </div>
-          <span className="selection-count">
-            {selectedModules.length} selected
-          </span>
+          <span className="catalogue-label">{selectedModules.length} selected</span>
         </div>
 
-        <fieldset className="module-grid">
-          <legend className="visually-hidden">Select active modules</legend>
-          {availableModules.map((module) => {
-            const isSelected = selectedModules.includes(module.code);
-            return (
-              <label
-                className={`module-option${isSelected ? " is-selected" : ""}`}
-                key={module.code}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleModule(module.code)}
-                />
-                <span className="module-option-content">
-                  <span className="module-option-title">
-                    <strong>{module.code}</strong>
-                    <span className="subject-tag">{module.subject}</span>
+        {loading ? (
+          <p className="panel-helper">Loading modules…</p>
+        ) : availableModules.length === 0 ? (
+          <p className="panel-helper">No modules found. Try a different institution type.</p>
+        ) : (
+          <fieldset className="module-grid">
+            <legend className="visually-hidden">Select active modules</legend>
+            {availableModules.map((module) => {
+              const isSelected = selectedModules.includes(module.code);
+              return (
+                <label
+                  className={`module-option${isSelected ? " is-selected" : ""}`}
+                  key={module.code}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleModule(module.code)}
+                  />
+                  <span className="module-option-content">
+                    <span className="module-option-title">
+                      <strong>{module.code}</strong>
+                      <span className="subject-tag">{module.subject}</span>
+                    </span>
+                    <span className="module-description">{module.title}</span>
+                    {module.peers !== undefined && (
+                      <span className="module-peer-count">
+                        <Check size={14} aria-hidden="true" />
+                        {module.peers} peers studying now
+                      </span>
+                    )}
                   </span>
-                  <span className="module-description">{module.title}</span>
-                  <span className="module-peer-count">
-                    <Check size={14} aria-hidden="true" />
-                    {module.peers} peers studying now
-                  </span>
-                </span>
-              </label>
-            );
-          })}
-        </fieldset>
+                </label>
+              );
+            })}
+          </fieldset>
+        )}
 
         <div className="save-row">
           <p>
-            Your selections preview the modules used to filter discovery.
+            {saveStatus === "saved"
+              ? "✓ Selections saved to your session."
+              : "Save your module selections to filter room discovery."}
           </p>
-          <button className="primary-button action-button" onClick={onSave}>
+          <button className="primary-button action-button" onClick={handleSave}>
             <Save size={16} aria-hidden="true" />
-            Save selections
+            {saveStatus === "saved" ? "Saved!" : "Save selections"}
           </button>
         </div>
       </section>
@@ -228,8 +198,7 @@ function ProfileScreen({
             <div>
               <h2 id="request-heading">Request a missing module</h2>
               <p>
-                Submit an inline request for a module not shown in the preview
-                catalogue.
+                Submit a request for a module not shown in the catalogue.
               </p>
             </div>
           </div>
@@ -238,13 +207,17 @@ function ProfileScreen({
 
         <form className="request-form" onSubmit={handleRequest}>
           <label className="form-field">
-            <span>Institution</span>
-            <select required defaultValue="">
+            <span>Institution type</span>
+            <select
+              name="institutionType"
+              defaultValue=""
+              required
+            >
               <option value="" disabled>
-                Select an institution
+                Select an institution type
               </option>
-              <option value="preview-university">Preview University</option>
-              <option value="preview-college">Preview College</option>
+              <option value="University">University</option>
+              <option value="College">College</option>
             </select>
           </label>
           <label className="form-field">
@@ -266,44 +239,25 @@ function ProfileScreen({
               maxLength={120}
             />
           </label>
-          <button className="secondary-button request-submit" type="submit">
+          {requestStatus === "done" && (
+            <p className="panel-helper" role="status">
+              <BookOpen size={14} aria-hidden="true" /> Request submitted successfully.
+            </p>
+          )}
+          {requestStatus === "error" && (
+            <p className="panel-helper" role="alert" style={{ color: "var(--color-error, #dc2626)" }}>
+              Failed to submit request. Please try again.
+            </p>
+          )}
+          <button
+            className="secondary-button request-submit"
+            type="submit"
+            disabled={requestStatus === "submitting"}
+          >
             <Send size={15} aria-hidden="true" />
-            Submit request
+            {requestStatus === "submitting" ? "Submitting…" : "Submit request"}
           </button>
         </form>
-
-        <div className="request-list-header">
-          <h3>Your module requests</h3>
-          <span>Sample tracking entries</span>
-        </div>
-        <div className="table-scroll">
-          <table className="request-table">
-            <thead>
-              <tr>
-                <th scope="col">Module code</th>
-                <th scope="col">Title</th>
-                <th scope="col">Institution</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sampleRequests.map((request) => (
-                <tr key={request.code}>
-                  <td>{request.code}</td>
-                  <td>{request.title}</td>
-                  <td>{request.institution}</td>
-                  <td>
-                    <span
-                      className={`status-chip status-${request.status.toLowerCase()}`}
-                    >
-                      {request.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <button className="text-button continue-link" onClick={onDiscover}>
