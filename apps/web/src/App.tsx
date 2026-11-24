@@ -7,6 +7,7 @@ import {
   User,
 } from "lucide-react";
 import { NAV_ITEMS } from "./lib/navigation.js";
+import { supabase } from "./lib/supabase.js";
 import AdminCatalogueScreen from "./features/admin/AdminCatalogueScreen.js";
 import ForumModerationScreen from "./features/admin/ForumModerationScreen.js";
 import DiscoverScreen from "./features/discover/DiscoverScreen.js";
@@ -50,13 +51,41 @@ function App() {
     setPasswordVisible(false);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setNotice(
-      isPasswordReset
-        ? "Password recovery is not available until Supabase Auth is connected."
-        : "Authentication is not connected yet. Connect Supabase Auth to continue.",
-    );
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    if (!supabase) {
+      setNotice(
+        isPasswordReset
+          ? "Password recovery is not available until Supabase Auth is connected."
+          : "Authentication is not connected yet. Connect Supabase Auth to continue."
+      );
+      return;
+    }
+
+    try {
+      if (isPasswordReset) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        setNotice("If your email is registered, a password reset link has been sent.");
+      } else if (authMode === "signup") {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        navigate("/discover");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        navigate("/discover");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Authentication failed";
+      setNotice(message);
+    }
   }
 
   function selectAuthMode(mode: AuthMode) {

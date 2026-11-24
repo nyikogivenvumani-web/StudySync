@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import {
   ArrowLeft,
   CameraOff,
@@ -12,6 +12,13 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
+import {
+  fetchRoomTimer,
+  fetchChecklist,
+  addChecklistItem,
+  toggleChecklistItem as apiToggleChecklist,
+  updateStudyStatus,
+} from "../../lib/api.js";
 
 type ChecklistItem = {
   id: string;
@@ -75,26 +82,76 @@ function SilentRoomScreen({
   const [studyStatus, setStudyStatus] = useState("Chapter 1 review");
   const [checklist, setChecklist] = useState(initialChecklist);
   const [newTask, setNewTask] = useState("");
+  const [timerMinutes, setTimerMinutes] = useState(50);
   const moduleCode = roomId.toLowerCase().includes("cos")
     ? "COS1511"
     : "MAT2611";
 
+  useEffect(() => {
+    fetchRoomTimer(roomId)
+      .then((t) => {
+        if (t?.phase_duration_minutes) {
+          setTimerMinutes(t.phase_duration_minutes);
+        }
+      })
+      .catch(() => {});
+
+    fetchChecklist(roomId)
+      .then((items) => {
+        if (items.length > 0) {
+          setChecklist(
+            items.map((i) => ({
+              id: i.id,
+              text: i.title,
+              owner: i.profiles?.full_name || "Participant",
+              complete: i.is_completed,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [roomId]);
+
   function toggleChecklistItem(itemId: string) {
+    const item = checklist.find((i) => i.id === itemId);
+    const nextState = !item?.complete;
+
     setChecklist((currentItems) =>
-      currentItems.map((item) =>
-        item.id === itemId ? { ...item, complete: !item.complete } : item,
-      ),
+      currentItems.map((i) =>
+        i.id === itemId ? { ...i, complete: nextState } : i
+      )
     );
+
+    apiToggleChecklist(roomId, itemId, nextState).catch(() => {});
     onUnavailable("Preview only: checklist changes are not saved to the room.");
   }
 
   function submitChecklistItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onUnavailable("Checklist updates are unavailable until the room service is connected.");
+    if (!newTask.trim()) return;
+
+    addChecklistItem(roomId, newTask.trim())
+      .then((item) => {
+        setChecklist((current) => [
+          ...current,
+          {
+            id: item.id,
+            text: item.title,
+            owner: "You",
+            complete: item.is_completed,
+          },
+        ]);
+        setNewTask("");
+      })
+      .catch(() => {
+        onUnavailable("Checklist updates are unavailable until the room service is connected.");
+      });
   }
 
   function submitStudyStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    updateStudyStatus(roomId, studyStatus)
+      .catch(() => {});
     onUnavailable("Your study status is only a preview and has not been shared.");
   }
 
@@ -229,7 +286,7 @@ function SilentRoomScreen({
               </div>
               <Clock3 size={19} aria-hidden="true" />
             </div>
-            <p className="timer-value">50:00</p>
+            <p className="timer-value">{timerMinutes}:00</p>
             <div className="timer-meta">
               <span>Focus block</span>
               <span>10 min break</span>

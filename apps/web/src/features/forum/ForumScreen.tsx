@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { ForumPost } from "./forumData.js";
+import { createForumPost } from "../../lib/api.js";
 
 type ForumScreenProps = {
   moduleCode: string;
@@ -28,11 +29,16 @@ function ForumScreen({
 
   function submitPost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!draft.trim()) return;
+
+    createForumPost(moduleCode, draft.trim()).catch(() => {});
     onUnavailable(
       editingPost
         ? "Edit not saved: the module forum is not connected yet."
         : "Post not published: the module forum is not connected yet.",
     );
+    setDraft("");
+    setEditingPost(null);
   }
 
   function startEditing(post: ForumPost) {
