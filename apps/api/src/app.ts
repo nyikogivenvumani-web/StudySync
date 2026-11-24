@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { institutionsRouter, modulesRouter } from "./modules/modules/modulesRouter.js";
 import { roomsRouter } from "./modules/rooms/roomsRouter.js";
+import { forumRouter } from "./modules/forum/forumRouter.js";
 
 export function createApp() {
   const app = express();
@@ -21,6 +22,7 @@ export function createApp() {
   app.use("/api/institutions", institutionsRouter);
   app.use("/api/modules", modulesRouter);
   app.use("/api/rooms", roomsRouter);
+  app.use("/api/modules/:moduleId/forum", forumRouter);
 
   return app;
 }

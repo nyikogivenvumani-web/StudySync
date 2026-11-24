@@ -49,6 +49,52 @@ const devStatuses: Map<string, Map<string, string>> = new Map([
   ],
 ]);
 
+type DevChecklistItem = {
+  id: string;
+  room_id: string;
+  created_by: string;
+  title: string;
+  is_completed: boolean;
+  created_at: string;
+};
+
+const devChecklists: Map<string, DevChecklistItem[]> = new Map([
+  [
+    "dev-room-1",
+    [
+      {
+        id: "check-1",
+        room_id: "dev-room-1",
+        created_by: "user-1",
+        title: "Complete Exercise 3.1",
+        is_completed: false,
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+      },
+      {
+        id: "check-2",
+        room_id: "dev-room-1",
+        created_by: "user-2",
+        title: "Review Theorem 2.4 proof",
+        is_completed: true,
+        created_at: new Date(Date.now() - 1800000).toISOString(),
+      },
+    ],
+  ],
+  [
+    "dev-room-closed",
+    [
+      {
+        id: "check-closed-1",
+        room_id: "dev-room-closed",
+        created_by: "user-1",
+        title: "Finished past paper 2024",
+        is_completed: true,
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+      },
+    ],
+  ],
+]);
+
 const devRooms: Map<string, DevRoom> = new Map([
   [
     "dev-room-1",
@@ -738,4 +784,305 @@ roomsRouter.put("/:id/status", requireAuth, async (req: Request, res: Response) 
 
   res.json({ message: "Status tag updated", status: data.status });
 });
+
+// GET /api/rooms/:id/checklist - Get shared checklist items in creation order
+// PRD FR-CHECK-01, FR-CHECK-07, FR-CHECK-08
+roomsRouter.get("/:id/checklist", async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    const items = devChecklists.get(id) || [];
+    // Always return in creation order (oldest first per PRD FR-CHECK-07)
+    const sorted = [...items].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    res.json({ items: sorted });
+    return;
+  }
+
+  const { data, error } = await client
+    .from("checklist_items")
+    .select("id, room_id, created_by, title, is_completed, created_at, profiles(id, full_name)")
+    .eq("room_id", id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ items: data || [] });
+});
+
+// POST /api/rooms/:id/checklist - Add milestone item (only if room is open)
+// PRD FR-CHECK-02, FR-CHECK-08
+roomsRouter.post("/:id/checklist", requireAuth, async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const userId = req.user!.id;
+  const { title } = req.body;
+
+  if (!title || typeof title !== "string" || title.trim().length === 0) {
+    res.status(400).json({ error: "Checklist item title is required" });
+    return;
+  }
+
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    const room = devRooms.get(id);
+    if (!room) {
+      res.status(404).json({ error: "Room not found" });
+      return;
+    }
+    if (room.status !== "open") {
+      res.status(400).json({ error: "Cannot add checklist items to a closed room (PRD FR-CHECK-08)" });
+      return;
+    }
+
+    let items = devChecklists.get(id);
+    if (!items) {
+      items = [];
+      devChecklists.set(id, items);
+    }
+
+    const newItem: DevChecklistItem = {
+      id: `check-${Date.now()}`,
+      room_id: id,
+      created_by: userId,
+      title: title.trim(),
+      is_completed: false,
+      created_at: new Date().toISOString(),
+    };
+    items.push(newItem);
+    res.status(201).json({ item: newItem });
+    return;
+  }
+
+  // Check if room is open
+  const { data: room, error: roomErr } = await client
+    .from("rooms")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (roomErr || !room) {
+    res.status(404).json({ error: "Room not found" });
+    return;
+  }
+
+  if (room.status !== "open") {
+    res.status(400).json({ error: "Cannot add checklist items to a closed room" });
+    return;
+  }
+
+  const { data, error } = await client
+    .from("checklist_items")
+    .insert({
+      room_id: id,
+      created_by: userId,
+      title: title.trim(),
+      is_completed: false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.status(201).json({ item: data });
+});
+
+// PATCH /api/rooms/:id/checklist/:itemId - Update item (complete/incomplete or title)
+// PRD FR-CHECK-03, FR-CHECK-06, FR-CHECK-08
+roomsRouter.patch("/:id/checklist/:itemId", requireAuth, async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+  const userId = req.user!.id;
+  const isAdmin = req.user!.role === "admin";
+  const { is_completed, title } = req.body;
+
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    const room = devRooms.get(id);
+    if (!room) {
+      res.status(404).json({ error: "Room not found" });
+      return;
+    }
+    if (room.status !== "open") {
+      res.status(400).json({ error: "Checklist is read-only when room is closed (PRD FR-CHECK-08)" });
+      return;
+    }
+
+    const items = devChecklists.get(id) || [];
+    const item = items.find((i) => i.id === itemId);
+    if (!item) {
+      res.status(404).json({ error: "Checklist item not found" });
+      return;
+    }
+
+    // Editing title requires creator or admin
+    if (title !== undefined && item.created_by !== userId && !isAdmin) {
+      res.status(403).json({ error: "Only the creator or an admin can edit item text (PRD FR-CHECK-06)" });
+      return;
+    }
+
+    if (typeof is_completed === "boolean") {
+      item.is_completed = is_completed;
+    }
+    if (title !== undefined && typeof title === "string" && title.trim().length > 0) {
+      item.title = title.trim();
+    }
+
+    res.json({ item });
+    return;
+  }
+
+  // Check if room is open
+  const { data: room, error: roomErr } = await client
+    .from("rooms")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (roomErr || !room) {
+    res.status(404).json({ error: "Room not found" });
+    return;
+  }
+
+  if (room.status !== "open") {
+    res.status(400).json({ error: "Checklist is read-only when room is closed" });
+    return;
+  }
+
+  // Verify ownership if modifying title
+  const { data: existingItem, error: fetchErr } = await client
+    .from("checklist_items")
+    .select("created_by")
+    .eq("id", itemId)
+    .single();
+
+  if (fetchErr || !existingItem) {
+    res.status(404).json({ error: "Checklist item not found" });
+    return;
+  }
+
+  if (title !== undefined && existingItem.created_by !== userId && !isAdmin) {
+    res.status(403).json({ error: "Only the creator or an admin can edit this item" });
+    return;
+  }
+
+  const updates: { updated_at: string; is_completed?: boolean; title?: string } = {
+    updated_at: new Date().toISOString(),
+  };
+  if (typeof is_completed === "boolean") {
+    updates.is_completed = is_completed;
+  }
+  if (title !== undefined && typeof title === "string" && title.trim().length > 0) {
+    updates.title = title.trim();
+  }
+
+  const { data: updatedItem, error: updateErr } = await client
+    .from("checklist_items")
+    .update(updates)
+    .eq("id", itemId)
+    .select()
+    .single();
+
+  if (updateErr) {
+    res.status(500).json({ error: updateErr.message });
+    return;
+  }
+
+  res.json({ item: updatedItem });
+});
+
+// DELETE /api/rooms/:id/checklist/:itemId - Delete item
+// PRD FR-CHECK-06, FR-CHECK-08: Creator can delete own item; admin can delete any item.
+roomsRouter.delete("/:id/checklist/:itemId", requireAuth, async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+  const userId = req.user!.id;
+  const isAdmin = req.user!.role === "admin";
+
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    const room = devRooms.get(id);
+    if (!room) {
+      res.status(404).json({ error: "Room not found" });
+      return;
+    }
+    if (room.status !== "open") {
+      res.status(400).json({ error: "Checklist is read-only when room is closed (PRD FR-CHECK-08)" });
+      return;
+    }
+
+    const items = devChecklists.get(id) || [];
+    const itemIndex = items.findIndex((i) => i.id === itemId);
+    if (itemIndex === -1) {
+      res.status(404).json({ error: "Checklist item not found" });
+      return;
+    }
+
+    const item = items[itemIndex];
+    if (item.created_by !== userId && !isAdmin) {
+      res.status(403).json({ error: "Only the creator or an admin can delete this item (PRD FR-CHECK-06)" });
+      return;
+    }
+
+    items.splice(itemIndex, 1);
+    res.json({ message: "Checklist item deleted" });
+    return;
+  }
+
+  // Check if room is open
+  const { data: room, error: roomErr } = await client
+    .from("rooms")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (roomErr || !room) {
+    res.status(404).json({ error: "Room not found" });
+    return;
+  }
+
+  if (room.status !== "open") {
+    res.status(400).json({ error: "Checklist is read-only when room is closed" });
+    return;
+  }
+
+  const { data: existingItem, error: fetchErr } = await client
+    .from("checklist_items")
+    .select("created_by")
+    .eq("id", itemId)
+    .single();
+
+  if (fetchErr || !existingItem) {
+    res.status(404).json({ error: "Checklist item not found" });
+    return;
+  }
+
+  if (existingItem.created_by !== userId && !isAdmin) {
+    res.status(403).json({ error: "Only the creator or an admin can delete this item" });
+    return;
+  }
+
+  const { error: deleteErr } = await client
+    .from("checklist_items")
+    .delete()
+    .eq("id", itemId);
+
+  if (deleteErr) {
+    res.status(500).json({ error: deleteErr.message });
+    return;
+  }
+
+  res.json({ message: "Checklist item deleted" });
+});
+
 
