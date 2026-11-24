@@ -1,14 +1,26 @@
-import { useState, useEffect } from "react";
 import {
+  AlertCircle,
   ArrowRight,
   LockKeyhole,
-  Plus,
-  RefreshCw,
   ShieldCheck,
   Users,
   Video,
+  WifiOff,
 } from "lucide-react";
-import { fetchRooms, joinRoom, type RoomItem } from "../../lib/api.js";
+
+type Room = {
+  id: string;
+  moduleCode: string;
+  title: string;
+  participants: number;
+  status: "open" | "full";
+};
+
+type ClosedRoom = {
+  id: string;
+  moduleCode: string;
+  title: string;
+};
 
 type DiscoverScreenProps = {
   selectedModules: string[];
@@ -19,54 +31,62 @@ type DiscoverScreenProps = {
 
 const capacity = 20;
 
+const roomSamples: Room[] = [
+  {
+    id: "room-mat-01",
+    moduleCode: "MAT2611",
+    title: "Linear Algebra II & Matrix Methods",
+    participants: 8,
+    status: "open",
+  },
+  {
+    id: "room-cos-01",
+    moduleCode: "COS1511",
+    title: "Introduction to Programming I",
+    participants: 14,
+    status: "open",
+  },
+  {
+    id: "room-mat-02",
+    moduleCode: "MAT2611",
+    title: "Linear Algebra II & Matrix Methods",
+    participants: capacity,
+    status: "full",
+  },
+  {
+    id: "room-ecs-01",
+    moduleCode: "ECS1501",
+    title: "Economics IA: Microeconomics",
+    participants: 9,
+    status: "open",
+  },
+];
+
+const closedRoomSamples: ClosedRoom[] = [
+  {
+    id: "room-cos-closed",
+    moduleCode: "COS1511",
+    title: "Introduction to Programming I",
+  },
+  {
+    id: "room-ecs-closed",
+    moduleCode: "ECS1501",
+    title: "Economics IA: Microeconomics",
+  },
+];
+
 function DiscoverScreen({
   selectedModules,
   onEditProfile,
   onJoinRoom,
   onViewChecklist,
 }: DiscoverScreenProps) {
-  const [openRooms, setOpenRooms] = useState<RoomItem[]>([]);
-  const [closedRooms, setClosedRooms] = useState<RoomItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [joiningId, setJoiningId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  function loadRooms() {
-    setLoading(true);
-    setError("");
-    fetchRooms()
-      .then((data) => {
-        setOpenRooms(data.openRooms ?? []);
-        setClosedRooms(data.closedRooms ?? []);
-      })
-      .catch(() => setError("Could not load rooms. Is the API running?"))
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    loadRooms();
-  }, []);
-
-  async function handleJoin(roomId: string) {
-    setJoiningId(roomId);
-    try {
-      await joinRoom(roomId);
-      onJoinRoom(roomId);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to join room";
-      setError(msg);
-    } finally {
-      setJoiningId(null);
-    }
-  }
-
-  const filteredOpen = selectedModules.length > 0
-    ? openRooms.filter((r) => !r.module_code || selectedModules.includes(r.module_code))
-    : openRooms;
-
-  const filteredClosed = selectedModules.length > 0
-    ? closedRooms.filter((r) => !r.module_code || selectedModules.includes(r.module_code))
-    : closedRooms;
+  const openRooms = roomSamples.filter(
+    (room) => selectedModules.includes(room.moduleCode),
+  );
+  const closedRooms = closedRoomSamples.filter((room) =>
+    selectedModules.includes(room.moduleCode),
+  );
 
   return (
     <div className="screen-stack">
@@ -78,17 +98,16 @@ function DiscoverScreen({
             Find open study rooms for your active modules.
           </p>
         </div>
-        <button className="secondary-button" onClick={loadRooms} aria-label="Refresh rooms">
-          <RefreshCw size={15} aria-hidden="true" />
-          Refresh
-        </button>
+        <span className="preview-chip">Preview data</span>
       </header>
 
-      {error && (
-        <section className="preview-banner" role="alert">
-          <p>{error}</p>
-        </section>
-      )}
+      <section className="preview-banner" role="status">
+        <WifiOff size={18} aria-hidden="true" />
+        <p>
+          Sample rooms only. Live availability and room actions are not connected
+          yet.
+        </p>
+      </section>
 
       <section className="module-context" aria-label="Active modules filter">
         <div className="context-title">
@@ -120,63 +139,76 @@ function DiscoverScreen({
         <div>
           <h2>Silent, video-only study</h2>
           <p>
-            Cameras on, microphones off. All rooms follow the silent study protocol.
+            Microphones stay off. Keep your camera on and study quietly with
+            classmates.
           </p>
         </div>
         <span className="protocol-badge">
-          <ShieldCheck size={14} aria-hidden="true" />
-          Enforced
+          <ShieldCheck size={15} aria-hidden="true" />
+          Room rules
         </span>
       </section>
 
-      {loading ? (
-        <p className="panel-helper">Loading rooms…</p>
+      {selectedModules.length === 0 ? (
+        <section className="empty-state" aria-labelledby="no-modules-heading">
+          <AlertCircle size={24} aria-hidden="true" />
+          <h2 id="no-modules-heading">Choose modules to see study rooms</h2>
+          <p>
+            Add at least one active module to your profile to filter room
+            discovery.
+          </p>
+          <button className="primary-button action-button" onClick={onEditProfile}>
+            Edit module profile
+          </button>
+        </section>
       ) : (
         <>
           <section aria-labelledby="open-rooms-heading">
             <div className="section-heading room-list-heading">
               <div>
                 <h2 id="open-rooms-heading">Open rooms</h2>
-                <p>Join a room to begin your focus session.</p>
+                <p>Rooms for your selected modules, with seats available.</p>
               </div>
-              <span className="room-count">{filteredOpen.length} rooms</span>
+              <span className="room-count">{openRooms.length} sample rooms</span>
             </div>
 
-            {filteredOpen.length > 0 ? (
+            {openRooms.length > 0 ? (
               <div className="room-grid">
-                {filteredOpen.map((room) => {
-                  const isFull = room.is_full || room.occupancy >= capacity;
-                  const isJoining = joiningId === room.id;
+                {openRooms.map((room) => {
+                  const isFull =
+                    room.status === "full" || room.participants >= capacity;
                   return (
                     <article className="room-card" key={room.id}>
                       <div className="room-card-topline">
                         <span className="room-module-tag">
-                          {room.module_code ?? "—"}
+                          {room.moduleCode}
                         </span>
-                        <span className={`room-state ${isFull ? "is-full" : "is-open"}`}>
+                        <span
+                          className={`room-state ${isFull ? "is-full" : "is-open"}`}
+                        >
                           <span className="state-dot" aria-hidden="true" />
                           {isFull ? "Full" : "Open"}
                         </span>
                       </div>
-                      <h3>{room.module_code ?? "Study room"}</h3>
+                      <h3>{room.moduleCode}</h3>
                       <p className="room-title">{room.title}</p>
                       <div className="occupancy-row">
                         <span>Occupancy</span>
                         <span>
-                          {room.occupancy}/{capacity} participants
+                          {room.participants}/{capacity} participants
                         </span>
                       </div>
                       <div
                         className={`occupancy-track${isFull ? " is-full" : ""}`}
                         role="progressbar"
-                        aria-label={`${room.module_code} room occupancy`}
+                        aria-label={`${room.moduleCode} room occupancy`}
                         aria-valuemin={0}
                         aria-valuemax={capacity}
-                        aria-valuenow={room.occupancy}
+                        aria-valuenow={room.participants}
                       >
                         <span
                           style={{
-                            width: `${(room.occupancy / capacity) * 100}%`,
+                            width: `${(room.participants / capacity) * 100}%`,
                           }}
                         />
                       </div>
@@ -187,18 +219,13 @@ function DiscoverScreen({
                             : "primary-button room-action"
                         }
                         type="button"
-                        disabled={isFull || isJoining}
-                        onClick={() => handleJoin(room.id)}
+                        disabled={isFull}
+                        onClick={() => onJoinRoom(room.id)}
                       >
                         {isFull ? (
                           <>
                             <LockKeyhole size={16} aria-hidden="true" />
                             Room full (20/20)
-                          </>
-                        ) : isJoining ? (
-                          <>
-                            <RefreshCw size={16} aria-hidden="true" />
-                            Joining…
                           </>
                         ) : (
                           <>
@@ -214,18 +241,7 @@ function DiscoverScreen({
             ) : (
               <div className="empty-inline">
                 <Users size={20} aria-hidden="true" />
-                <p>
-                  {selectedModules.length > 0
-                    ? "No open rooms for your selected modules."
-                    : "No open rooms yet."}
-                </p>
-                <button className="secondary-button" onClick={() => {
-                  const form = document.querySelector<HTMLFormElement>(".create-room-form");
-                  form?.scrollIntoView({ behavior: "smooth" });
-                }}>
-                  <Plus size={15} aria-hidden="true" />
-                  Create a room
-                </button>
+                <p>No sample rooms are available for the selected modules.</p>
               </div>
             )}
           </section>
@@ -236,17 +252,17 @@ function DiscoverScreen({
                 <h2 id="closed-rooms-heading">Closed rooms</h2>
                 <p>Previously closed rooms remain available for checklists.</p>
               </div>
-              <span className="room-count">{filteredClosed.length} rooms</span>
+              <span className="room-count">{closedRooms.length} sample rooms</span>
             </div>
-            {filteredClosed.length > 0 ? (
+            {closedRooms.length > 0 ? (
               <div className="closed-room-list">
-                {filteredClosed.map((room) => (
+                {closedRooms.map((room) => (
                   <article className="closed-room-row" key={room.id}>
                     <div className="closed-room-details">
-                      <span className="room-module-tag">{room.module_code ?? "—"}</span>
+                      <span className="room-module-tag">{room.moduleCode}</span>
                       <div>
                         <h3>{room.title}</h3>
-                        <p>{room.module_code} study room</p>
+                        <p>{room.moduleCode} study room</p>
                       </div>
                     </div>
                     <div className="closed-room-actions">
