@@ -11,9 +11,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.10",
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/node": "^22.15.30",
     "@types/supertest": "^7.2.1",
