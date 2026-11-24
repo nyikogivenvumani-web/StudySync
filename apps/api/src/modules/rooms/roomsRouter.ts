@@ -18,6 +18,37 @@ type DevRoom = {
   participants: Set<string>;
 };
 
+type DevTimer = {
+  room_id: string;
+  phase: "focus" | "break";
+  phase_duration_minutes: number;
+  phase_end_at: string | null;
+  is_running: boolean;
+};
+
+const devTimers: Map<string, DevTimer> = new Map([
+  [
+    "dev-room-1",
+    {
+      room_id: "dev-room-1",
+      phase: "focus",
+      phase_duration_minutes: 50,
+      phase_end_at: null,
+      is_running: false,
+    },
+  ],
+]);
+
+const devStatuses: Map<string, Map<string, string>> = new Map([
+  [
+    "dev-room-1",
+    new Map([
+      ["user-1", "Chapter 1 – Differential Equations"],
+      ["user-2", "Reviewing Lecture 4 slides"],
+    ]),
+  ],
+]);
+
 const devRooms: Map<string, DevRoom> = new Map([
   [
     "dev-room-1",
@@ -459,3 +490,252 @@ roomsRouter.post("/:id/leave", requireAuth, async (req: Request, res: Response) 
 
   res.json({ message: "Left room successfully" });
 });
+
+// GET /api/rooms/:id/timer - Fetch synchronized timer state
+// PRD FR-TIMER-01, FR-TIMER-02, FR-TIMER-03, FR-TIMER-04
+roomsRouter.get("/:id/timer", async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    let timer = devTimers.get(id);
+    if (!timer) {
+      timer = {
+        room_id: id,
+        phase: "focus",
+        phase_duration_minutes: 50,
+        phase_end_at: null,
+        is_running: false,
+      };
+      devTimers.set(id, timer);
+    }
+    res.json({ timer });
+    return;
+  }
+
+  const { data: timer, error } = await client
+    .from("room_timers")
+    .select("room_id, phase, phase_duration_minutes, phase_end_at, is_running, updated_at")
+    .eq("room_id", id)
+    .single();
+
+  if (error || !timer) {
+    res.status(404).json({ error: "Timer not found for this room" });
+    return;
+  }
+
+  res.json({ timer });
+});
+
+// POST /api/rooms/:id/timer - Admin controls timer (start, pause, reset, advance)
+// PRD FR-TIMER-05: Timer controls available only to admin; participants read-only.
+roomsRouter.post("/:id/timer", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { action, phase, duration_minutes } = req.body;
+
+  if (!action || !["start", "pause", "reset", "advance"].includes(action)) {
+    res.status(400).json({ error: "Invalid action. Must be start, pause, reset, or advance." });
+    return;
+  }
+
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    let timer = devTimers.get(id);
+    if (!timer) {
+      timer = {
+        room_id: id,
+        phase: "focus",
+        phase_duration_minutes: 50,
+        phase_end_at: null,
+        is_running: false,
+      };
+      devTimers.set(id, timer);
+    }
+
+    if (action === "start") {
+      const duration = duration_minutes || timer.phase_duration_minutes || 50;
+      timer.phase_duration_minutes = duration;
+      timer.is_running = true;
+      timer.phase_end_at = new Date(Date.now() + duration * 60 * 1000).toISOString();
+    } else if (action === "pause") {
+      timer.is_running = false;
+      timer.phase_end_at = null;
+    } else if (action === "reset") {
+      timer.phase = "focus";
+      timer.phase_duration_minutes = 50;
+      timer.is_running = false;
+      timer.phase_end_at = null;
+    } else if (action === "advance") {
+      const nextPhase = timer.phase === "focus" ? "break" : "focus";
+      const nextDuration = nextPhase === "break" ? 10 : 50;
+      timer.phase = nextPhase;
+      timer.phase_duration_minutes = nextDuration;
+      timer.is_running = true;
+      timer.phase_end_at = new Date(Date.now() + nextDuration * 60 * 1000).toISOString();
+    }
+
+    res.json({ message: `Timer action ${action} executed`, timer });
+    return;
+  }
+
+  const { data: currentTimer, error: fetchErr } = await client
+    .from("room_timers")
+    .select("*")
+    .eq("room_id", id)
+    .single();
+
+  if (fetchErr || !currentTimer) {
+    res.status(404).json({ error: "Timer not found for this room" });
+    return;
+  }
+
+  let nextPhase = currentTimer.phase;
+  let nextDuration = currentTimer.phase_duration_minutes;
+  let nextIsRunning = currentTimer.is_running;
+  let nextEndAt = currentTimer.phase_end_at;
+
+  if (action === "start") {
+    nextDuration = duration_minutes || (phase === "break" ? 10 : 50);
+    nextPhase = phase || nextPhase;
+    nextIsRunning = true;
+    nextEndAt = new Date(Date.now() + nextDuration * 60 * 1000).toISOString();
+  } else if (action === "pause") {
+    nextIsRunning = false;
+    nextEndAt = null;
+  } else if (action === "reset") {
+    nextPhase = "focus";
+    nextDuration = 50;
+    nextIsRunning = false;
+    nextEndAt = null;
+  } else if (action === "advance") {
+    nextPhase = currentTimer.phase === "focus" ? "break" : "focus";
+    nextDuration = nextPhase === "break" ? 10 : 50;
+    nextIsRunning = true;
+    nextEndAt = new Date(Date.now() + nextDuration * 60 * 1000).toISOString();
+  }
+
+  const { data: updatedTimer, error: updateErr } = await client
+    .from("room_timers")
+    .update({
+      phase: nextPhase,
+      phase_duration_minutes: nextDuration,
+      is_running: nextIsRunning,
+      phase_end_at: nextEndAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("room_id", id)
+    .select()
+    .single();
+
+  if (updateErr) {
+    res.status(500).json({ error: updateErr.message });
+    return;
+  }
+
+  res.json({ message: `Timer action ${action} executed`, timer: updatedTimer });
+});
+
+// GET /api/rooms/:id/status - Fetch study statuses of all active participants
+// PRD FR-STATUS-02: Room participants can see each other's status tags
+roomsRouter.get("/:id/status", async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const client = supabaseAdmin || supabasePublic;
+
+  if (!client) {
+    const statusesMap = devStatuses.get(id);
+    const statuses = statusesMap
+      ? Array.from(statusesMap.entries()).map(([userId, status]) => ({
+          user_id: userId,
+          status,
+        }))
+      : [];
+    res.json({ statuses });
+    return;
+  }
+
+  const { data, error } = await client
+    .from("study_statuses")
+    .select("user_id, status, updated_at, profiles(id, full_name)")
+    .eq("room_id", id);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ statuses: data || [] });
+});
+
+// PUT /api/rooms/:id/status - Participant updates their study status tag
+// PRD FR-STATUS-01, FR-STATUS-04: Plain text of 1 to 60 characters; empty clears status.
+roomsRouter.put("/:id/status", requireAuth, async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const userId = req.user!.id;
+  const rawStatus = req.body.status;
+
+  // Trim whitespace
+  const trimmed = typeof rawStatus === "string" ? rawStatus.trim() : "";
+
+  // If empty, clear the status tag
+  if (trimmed.length === 0) {
+    const client = supabaseAdmin || supabasePublic;
+    if (!client) {
+      const roomStatuses = devStatuses.get(id);
+      if (roomStatuses) {
+        roomStatuses.delete(userId);
+      }
+      res.json({ message: "Status tag cleared", status: null });
+      return;
+    }
+
+    await client
+      .from("study_statuses")
+      .delete()
+      .eq("room_id", id)
+      .eq("user_id", userId);
+
+    res.json({ message: "Status tag cleared", status: null });
+    return;
+  }
+
+  // Validate length 1 to 60 characters (PRD FR-STATUS-04)
+  if (trimmed.length > 60) {
+    res.status(400).json({
+      error: "Status tag must be between 1 and 60 characters after trimming whitespace.",
+    });
+    return;
+  }
+
+  const client = supabaseAdmin || supabasePublic;
+  if (!client) {
+    let roomStatuses = devStatuses.get(id);
+    if (!roomStatuses) {
+      roomStatuses = new Map();
+      devStatuses.set(id, roomStatuses);
+    }
+    roomStatuses.set(userId, trimmed);
+    res.json({ message: "Status tag updated", status: trimmed });
+    return;
+  }
+
+  // Upsert the status tag
+  const { data, error } = await client
+    .from("study_statuses")
+    .upsert({
+      room_id: id,
+      user_id: userId,
+      status: trimmed,
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ message: "Status tag updated", status: data.status });
+});
+
