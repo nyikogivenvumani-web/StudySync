@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -7,6 +8,7 @@ import {
   Video,
   WifiOff,
 } from "lucide-react";
+import { fetchRooms, type RoomItem } from "../../lib/api.js";
 
 type Room = {
   id: string;
@@ -81,12 +83,39 @@ function DiscoverScreen({
   onJoinRoom,
   onViewChecklist,
 }: DiscoverScreenProps) {
-  const openRooms = roomSamples.filter(
-    (room) => selectedModules.includes(room.moduleCode),
-  );
-  const closedRooms = closedRoomSamples.filter((room) =>
-    selectedModules.includes(room.moduleCode),
-  );
+  const [liveOpenRooms, setLiveOpenRooms] = useState<RoomItem[]>([]);
+  const [liveClosedRooms, setLiveClosedRooms] = useState<RoomItem[]>([]);
+
+  useEffect(() => {
+    fetchRooms()
+      .then((data) => {
+        if (data.openRooms?.length > 0) setLiveOpenRooms(data.openRooms);
+        if (data.closedRooms?.length > 0) setLiveClosedRooms(data.closedRooms);
+      })
+      .catch(() => {});
+  }, []);
+
+  const openRooms: Room[] = liveOpenRooms.length > 0
+    ? liveOpenRooms
+        .filter((r) => !r.module_code || selectedModules.includes(r.module_code))
+        .map((r) => ({
+          id: r.id,
+          moduleCode: r.module_code || "MAT2611",
+          title: r.title,
+          participants: r.occupancy,
+          status: r.is_full ? ("full" as const) : ("open" as const),
+        }))
+    : roomSamples.filter((room) => selectedModules.includes(room.moduleCode));
+
+  const closedRooms: ClosedRoom[] = liveClosedRooms.length > 0
+    ? liveClosedRooms
+        .filter((r) => !r.module_code || selectedModules.includes(r.module_code))
+        .map((r) => ({
+          id: r.id,
+          moduleCode: r.module_code || "MAT2611",
+          title: r.title,
+        }))
+    : closedRoomSamples.filter((room) => selectedModules.includes(room.moduleCode));
 
   return (
     <div className="screen-stack">

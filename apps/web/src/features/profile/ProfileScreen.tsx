@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { ArrowRight, BookOpen, Check, Plus, Save, Send } from "lucide-react";
+import { fetchInstitutions, fetchModules, submitModuleRequest } from "../../lib/api.js";
 
 type ModuleOption = {
   code: string;
   title: string;
   subject: string;
-  peers: number;
+  peers?: number;
 };
 
 type ModuleRequest = {
@@ -73,6 +74,22 @@ function ProfileScreen({
   onDiscover,
 }: ProfileScreenProps) {
   const [institution, setInstitution] = useState("");
+  const [institutionList, setInstitutionList] = useState<{ id: string; name: string }[]>([]);
+  const [availableModules, setAvailableModules] = useState<ModuleOption[]>(moduleOptions);
+
+  useEffect(() => {
+    fetchInstitutions()
+      .then((types) => setInstitutionList(types))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchModules(institution)
+      .then((mods) => {
+        if (mods.length > 0) setAvailableModules(mods);
+      })
+      .catch(() => {});
+  }, [institution]);
 
   function toggleModule(code: string) {
     const updatedModules = selectedModules.includes(code)
@@ -83,6 +100,17 @@ function ProfileScreen({
 
   function handleRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const code = formData.get("moduleCode") as string;
+    const title = formData.get("moduleTitle") as string;
+    if (code) {
+      submitModuleRequest({
+        code,
+        title,
+        institution_type: institution || "University",
+      }).catch(() => {});
+    }
     onRequest();
   }
 
@@ -123,8 +151,18 @@ function ProfileScreen({
             onChange={(event) => setInstitution(event.target.value)}
           >
             <option value="">Select an institution</option>
-            <option value="preview-university">Preview University</option>
-            <option value="preview-college">Preview College</option>
+            {institutionList.length > 0 ? (
+              institutionList.map((inst) => (
+                <option value={inst.id} key={inst.id}>
+                  {inst.name}
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="University">University</option>
+                <option value="College">College</option>
+              </>
+            )}
           </select>
         </label>
       </section>
@@ -142,7 +180,7 @@ function ProfileScreen({
 
         <fieldset className="module-grid">
           <legend className="visually-hidden">Select active modules</legend>
-          {moduleOptions.map((module) => {
+          {availableModules.map((module) => {
             const isSelected = selectedModules.includes(module.code);
             return (
               <label
