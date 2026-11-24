@@ -2,7 +2,7 @@
 
 **Document status:** MVP delivery plan (lightweight scope)
 **Product:** StudySync
-**Version:** 1.3
+**Version:** 1.4
 **Target deadline:** Wednesday, 25 November 2026, 15:30 SAST
 **Development approach:** Phased delivery with test-driven verification
 
@@ -10,11 +10,13 @@
 
 **Changes in v1.3:** aligned with PRD v1.3: Daily.co selected as the video provider, motion and performance rules, creation-ordered checklist that stays readable after a room closes, "Closed rooms" list on discovery, 60-character status tags, "Edited" label on posts. Marked **[v1.3]**.
 
+**Changes in v1.4:** aligned with PRD v1.4: simplified institution selection to institution type ("College" or "University") for current MVP to ensure on-time delivery; exhaustive DHET university/college catalogue listing deferred to v2. Marked **[v1.4]**.
+
 ---
 
 ## 1. Objective
 
-Deliver the StudySync MVP described in `PRD.md` v1.3: authenticated student/admin access with password reset, module-based discovery and module requests, admin catalogue and room management, silent video-only 20-person study rooms, a synchronized 50/10 Pomodoro timer controlled by admins, live status tags, a persistent shared checklist, and text-based module forums with editing and admin moderation.
+Deliver the StudySync MVP described in `PRD.md` v1.4: authenticated student/admin access with password reset, module-based discovery and module requests, institution type selection (College/University), admin catalogue and room management, silent video-only 20-person study rooms, a synchronized 50/10 Pomodoro timer controlled by admins, live status tags, a persistent shared checklist, and text-based module forums with editing and admin moderation. **[v1.4]**
 
 The implementation uses the specified stack:
 
@@ -28,7 +30,7 @@ The implementation uses the specified stack:
 
 | Phase | Date | Main outcome |
 |---|---|---|
-| Phase 1 — Foundation, designs, CI | Sunday, 22 November 2026 | Project structure, documentation, designs, Supabase foundation, RLS baseline, DHET seed plan, CI |
+| Phase 1 — Foundation, designs, CI | Sunday, 22 November 2026 | Project structure, documentation, designs, Supabase foundation, RLS baseline, institution type baseline (College/University), CI |
 | Phase 2 — Auth, roles, catalogue, forum, room shell | Monday, 23 November 2026 | Auth and password reset, role enforcement, module profile and requests, admin catalogue, room creation and capacity, checklist, forum |
 | Phase 3 — Silent video rooms and TDD | Tuesday, 24 November 2026 | Video-only rooms, synchronized timer, status tags, automated test completion, deployment |
 | Phase 4 — Polish, README, demo freeze | Wednesday, 25 November 2026 by 13:30 | Responsive QA, documentation, test accounts, investor pitch and live demo recording |
@@ -46,6 +48,7 @@ Any schedule change should be recorded explicitly.
 | Room moderators, scheduling, and expiry | `room_moderators` table and nomination, two-moderator limit, room-level permission helper, scheduled sessions (`scheduled_start`), automatic expiry job |
 | Forum file attachments | Supabase Storage bucket and policies, upload/validation, signed URLs, attachment UI |
 | Dark mode | Dual theme tokens and dark variants, dark-mode QA |
+| Exhaustive DHET institution catalogue | Full listing/dropdown of all South African universities and colleges; simplified to College/University type selection for MVP **[v1.4]** |
 
 ### 3.2 What remains in the MVP
 
@@ -90,10 +93,10 @@ In order of what to defer first: hard delete of catalogue records (use archive o
 
 - [ ] Create or configure the hosted Supabase project.
 - [ ] Configure Supabase Auth for email/password registration, login, and password reset (set the reset redirect URL).
-- [ ] Design initial tables: profiles, institutions, modules (with archived flag), `module_requests` (`pending`/`approved`/`rejected`, optional title), enrolments, rooms (module, open/closed state, created by admin), room participants/presence, study status (`CHECK` length 1 to 60 after trim), timer state, checklist items (creator, `created_at` for ordering, retained after the room closes), forum posts (text, `edited_at`). **[v1.3]**
+- [ ] Design initial tables: profiles, institutions / institution types (College/University), modules (with archived flag), `module_requests` (`pending`/`approved`/`rejected`, optional title), enrolments, rooms (module, open/closed state, created by admin), room participants/presence, study status (`CHECK` length 1 to 60 after trim), timer state, checklist items (creator, `created_at` for ordering, retained after the room closes), forum posts (text, `edited_at`). **[v1.4]**
 - [ ] Add migrations or another repeatable schema-management process.
 - [ ] Define role storage and the controlled admin-provisioning approach.
-- [ ] Write a seed script for DHET-registered South African universities and colleges; document the source of the list.
+- [ ] Set up baseline institution types (College, University); comprehensive DHET institution seed deferred to v2. **[v1.4]**
 - [ ] Implement baseline RLS policies for every table, including ownership-based checklist/forum editing and admin-only catalogue, room, timer, and moderation writes.
 - [ ] Add RLS so module members can read a closed room's checklist but nobody can write to it, and so only the checklist item's creator or an admin can edit or delete it while the room is open. **[v1.3]**
 - [ ] Test policies using student and admin identities.
@@ -111,7 +114,7 @@ In order of what to defer first: hard delete of catalogue records (use archive o
 
 - Frontend and backend run locally.
 - Hosted Supabase project is reachable through environment configuration.
-- Initial schema, RLS policies, and DHET institution seed are applied and tested.
+- Initial schema, RLS policies, and baseline institution options are applied and tested. **[v1.4]**
 - Realtime is configured for the required data areas.
 - Theme tokens and the navigation shell render in the single theme.
 - GitHub Actions runs lint, typecheck, tests, and build.
@@ -139,10 +142,10 @@ In order of what to defer first: hard delete of catalogue records (use archive o
 - [ ] Student denied from admin-only API actions; admin allowed.
 - [ ] Direct database access attempts rejected by RLS where unauthorized.
 
-### 5.2 Institution, module profile, and module requests
+### 5.2 Institution type, module profile, and module requests
 
-- [ ] Create institution and module catalogue read endpoints or queries.
-- [ ] Implement institution selection and active-module selection in the student profile; persist associations.
+- [ ] Create institution type and module catalogue read endpoints or queries. **[v1.4]**
+- [ ] Implement institution type selection (College or University) and active-module selection in the student profile; persist associations. **[v1.4]**
 - [ ] Implement the inline module request form on S02 (no modal) and the student's own request list with status.
 - [ ] Implement admin module-request review: **Approve & Add** (insert into `modules`, mark `approved`, in a single transaction) and **Reject**.
 - [ ] Implement admin catalogue actions: create/add, edit/update, verify, archive/delete (delete behind a confirmation dialog).
@@ -150,7 +153,7 @@ In order of what to defer first: hard delete of catalogue records (use archive o
 
 **Tests**
 
-- [ ] Student can save and retrieve institution/module selections; cannot modify another student's profile.
+- [ ] Student can save and retrieve institution type and module selections; cannot modify another student's profile. **[v1.4]**
 - [ ] Student can create a request but cannot insert into `modules` or alter request status.
 - [ ] Approve & Add creates the module and marks the request approved; Reject marks it rejected.
 - [ ] Admin can create, edit, verify, archive/delete; student cannot.
@@ -422,7 +425,7 @@ Do not rely on frontend-only restrictions for security or business rules.
 | Authentication | Registration, login, invalid credentials, protected routes, password reset |
 | Routing | Post-login redirect for missing modules, admin, student; denied-access for non-admins |
 | Roles | Student/admin separation in API and RLS |
-| Module profile | Institution and module selection persist correctly |
+| Module profile | Institution type (College/University) and module selection persist correctly **[v1.4]** |
 | Module requests | Create, approve, reject; student cannot write to modules |
 | Catalogue | Admin create, edit, verify, archive/delete; student denied |
 | Discovery | Joinable open rooms filtered by selected modules; closed rooms listed separately with read-only checklists |
@@ -451,7 +454,7 @@ Do not rely on frontend-only restrictions for security or business rules.
 | Admin-only timer and rooms | A room has no running timer unless an admin is present | Accepted for the MVP; make sure an admin is available for the demo; revisit in v2 |
 | Camera not enforced | Students could join without video | Accepted for the MVP; enforcement deferred to v2 |
 | Realtime state drift | Users may see different timer/checklist states | Persist authoritative state; use realtime as a synchronization signal |
-| DHET list sourcing | The registered-institution list must be obtained and cleaned | Identify the source early; seed institutions only |
+| DHET list sourcing | Sourcing and cleaning the full registered-institution list is time-consuming and risks missing the deadline | Deferred to v2. For the MVP, students select institution type (College or University). **[v1.4]** |
 | Video bandwidth/device constraints | Limited data or unavailable cameras | Target 240p/360p; test camera-denied and reconnect |
 | Undefined lifecycle decisions | Inconsistent room, timer, checklist behaviour | Resolve the remaining PRD Section 14 items before finalizing related schema |
 

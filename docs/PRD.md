@@ -2,13 +2,15 @@
 
 **Document status:** MVP specification (lightweight scope)
 **Product:** StudySync
-**Version:** 1.3
+**Version:** 1.4
 **Source:** Business Plan & MVP Specification: StudySync, plus product-owner answers to the Stitch design questions (Section 15)
 **Target MVP deadline:** Wednesday, 25 November 2026, 15:30 SAST
 
 **Changes in v1.2:** to keep the MVP deliverable by the deadline, four feature areas from v1.1 are **deferred to v2** (Section 3.3): camera enforcement and participant removal, room moderators with scheduled sessions and automatic expiry, forum file attachments, and dark mode. Requirements changed by this are marked **[v1.2]**. All other v1.1 decisions stand.
 
 **Changes in v1.3:** the remaining design questions are resolved (motion and performance rules, no tagline or illustrations, "Edited" label only, checklist creation order, 60-character status tags, closed-room checklists stay readable) and Daily.co is selected as the video provider. Marked **[v1.3]**.
+
+**Changes in v1.4:** simplified institution selection for MVP: removed full DHET university/college catalogue listing and dropdown search. Students now simply choose their institution type ("University" or "College") to meet the deadline. Full catalogue list of all South African universities/colleges deferred to v2. Marked **[v1.4]**.
 
 ---
 
@@ -62,6 +64,7 @@ The product owner has decided these will be handled in v2. They are not part of 
 | Room moderators, scheduling, and expiry | Students nominated as room moderators (max two), scheduled sessions, automatic expiry when everyone leaves | Rooms are created and closed only by admins. Rooms stay open until an admin closes them. Only admins control the timer. |
 | Forum file attachments | Attaching study notes/files to posts, file storage | Forum posts are text-only. Students can share links or information in post text. |
 | Dark mode | Light and dark themes | A single theme, as defined in the approved Stitch style guide. |
+| Full institution catalogue listing | Listing and selecting from all DHET-registered South African universities and colleges via exhaustive dropdown/search | For the MVP, students simply select their institution type: College or University. The exhaustive institution catalogue is deferred to v2. **[v1.4]** |
 
 ## 4. Users and roles
 
@@ -134,13 +137,13 @@ Priority labels: **P0** = required for the stated MVP; **P1** = useful follow-up
 
 **Priority:** P0
 
-- FR-MOD-01: A student shall be able to select an institution.
+- FR-MOD-01: A student shall be able to select an institution type (College or University) for the current MVP. **[v1.4]**
 - FR-MOD-02: A student shall be able to select one or more active modules.
-- FR-MOD-03: The system shall use institution and module selections to filter relevant rooms.
+- FR-MOD-03: The system shall use institution type and module selections to filter relevant rooms. **[v1.4]**
 - FR-MOD-04: Students shall be able to discover rooms associated with the modules they study.
-- FR-MOD-05: Admins shall be able to create/add, edit/update, verify, and archive/delete institution and module records.
-- FR-MOD-06: The institution catalogue shall be seeded with all South African universities and colleges currently registered with the Department of Higher Education and Training (DHET).
-- FR-MOD-07: A student shall be able to request a module missing from the catalogue using an inline form on the module profile screen (no modal), submitting institution, module code, and an optional title into `module_requests` with `status = 'pending'`.
+- FR-MOD-05: Admins shall be able to create/add, edit/update, verify, and archive/delete institution type and module records. **[v1.4]**
+- FR-MOD-06: For the MVP, institution selection provides College and University options. Sourcing and maintaining the comprehensive database of all individual DHET universities and colleges is deferred to v2 to meet deadlines. **[v1.4]**
+- FR-MOD-07: A student shall be able to request a module missing from the catalogue using an inline form on the module profile screen (no modal), submitting institution type (or name), module code, and an optional title into `module_requests` with `status = 'pending'`. **[v1.4]**
 - FR-MOD-08: Admins shall review pending requests in the admin catalogue view and choose **Approve & Add** (inserts into `modules` and marks the request `approved`) or **Reject** (marks it `rejected`).
 - FR-MOD-09: Only admins can add or verify catalogue modules; students can only create module requests. Enforced by backend middleware and RLS.
 
@@ -337,8 +340,8 @@ All screens are designed responsively for mobile and desktop in a single theme a
 
 #### S02 — Student module profile
 
-- Institution selection (catalogue seeded from DHET-registered South African universities and colleges) and Active modules selection (one or more codes, e.g. `MAT2611`, `COS1511`, `ECS1501`); primary action "Save selections".
-- Inline "Request a module" form (not a modal): institution, module code, optional title; submit creates a pending request. Show the student's own requests with status (pending / approved / rejected).
+- Institution selection: simple selection of institution type (College or University) for the MVP, rather than an exhaustive list of all DHET institutions. Active modules selection (one or more codes, e.g. `MAT2611`, `COS1511`, `ECS1501`); primary action "Save selections". **[v1.4]**
+- Inline "Request a module" form (not a modal): institution type/name, module code, optional title; submit creates a pending request. Show the student's own requests with status (pending / approved / rejected). **[v1.4]**
 - No degree programme, year of study, campus, timetable, or other profile fields.
 - Empty, Loading, Error, Offline, Success per Section 8.5. First-time or incomplete profiles land here (Section 8.4) and are routed to `/discover` after saving.
 
@@ -563,8 +566,8 @@ These are logical entities, not a finalized schema.
 | Entity | Purpose | Likely relationships |
 |---|---|---|
 | User profile | Application profile and role | Belongs to a Supabase user |
-| Institution | University or college (seeded from DHET register) | Has modules |
-| Module | Module code and catalogue entry; supports archive | Belongs to an institution |
+| Institution | Institution type (College / University in MVP; individual DHET institution in v2) | Has modules |
+| Module | Module code and catalogue entry; supports archive | Belongs to an institution / institution type |
 | Module request | Student request for a missing module (`pending` / `approved` / `rejected`, optional title) | Links student, institution; approval creates a Module |
 | Student module enrolment | Active module for a student | Links profile and module |
 | Study room | Module room with open/closed state, created by an admin | Belongs to a module |
@@ -596,7 +599,7 @@ The MVP is ready for release when:
 - [ ] Email/password registration, login, and password reset work through Supabase Auth.
 - [ ] `student` and `admin` roles are enforced by Express middleware and RLS.
 - [ ] Post-login routing follows Section 8.4.
-- [ ] Students can save an institution and active modules; the institution catalogue is seeded from the DHET-registered list.
+- [ ] Students can save an institution type (College/University) and active modules. **[v1.4]**
 - [ ] Students can submit module requests; admins can approve or reject them.
 - [ ] Admins can create, edit, verify, and archive/delete catalogue records.
 - [ ] Admins can create and close rooms; students can discover open module-specific rooms.
@@ -625,7 +628,7 @@ The MVP is ready for release when:
 2. **Room join concurrency:** Exact transaction/locking approach for the 20-seat limit.
 3. **Admin provisioning:** Who can grant or revoke the `admin` role, and how.
 4. **Timer operation with admin-only controls:** With only admins controlling the timer, a room has no running timer unless an admin is present. This is accepted for the MVP; consider an auto-start cycle in v2.
-5. **DHET catalogue source:** The exact source and format of the DHET registered-institution list, and refresh process.
+5. **DHET catalogue source:** Sourcing and listing all individual DHET universities and colleges is deferred to v2. For MVP, students select institution type (College or University). **[v1.4]**
 6. **Abuse reporting:** User reporting and escalation workflows beyond admin moderation.
 7. **Analytics:** Event tracking and calculation rules for retention and study-minute metrics.
 8. **Deployment providers:** Frontend/backend hosting.
@@ -647,7 +650,7 @@ The MVP is ready for release when:
 | 6–7 | Mobile and desktop navigation | Section 8.3 |
 | 8 | Post-login landing | Section 8.4 |
 | 9 | Password reset | Added (S08, FR-AUTH-07) |
-| 10 | Institutions | All South African universities and colleges currently registered with DHET |
+| 10 | Institutions | All South African universities and colleges currently registered with DHET (v1.1); **simplified for MVP to institution type (College or University) to meet deadline; full DHET list deferred to v2 (v1.4)** |
 | 11 | Missing modules | Inline request on S02; admin approves/rejects in S06 |
 | 12 | Admin catalogue actions | Create/add, edit/update, verify, archive/delete |
 | 13 | Room creation | Admin or admin-nominated student (v1.1); **admin only in the MVP; moderators deferred to v2 (v1.2)** |
