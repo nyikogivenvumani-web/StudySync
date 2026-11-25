@@ -1085,4 +1085,84 @@ roomsRouter.delete("/:id/checklist/:itemId", requireAuth, async (req: Request, r
   res.json({ message: "Checklist item deleted" });
 });
 
+/**
+ * POST /api/rooms/:id/video-token
+ * Creates (or reuses) a Daily.co room and returns a meeting token for the participant.
+ */
+roomsRouter.post("/:id/video-token", requireAuth, async (req: Request, res: Response) => {
+  const dailyApiKey = process.env.DAILY_API_KEY;
+  if (!dailyApiKey) {
+    res.status(503).json({ error: "Video service is not configured" });
+    return;
+  }
+
+  const roomId = String(req.params.id ?? "").trim();
+  if (!roomId) {
+    res.status(400).json({ error: "Room ID is required" });
+    return;
+  }
+
+  const dailyRoomName = `studysync-${roomId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const headers = {
+    Authorization: `Bearer ${dailyApiKey}`,
+    "Content-Type": "application/json",
+  };
+
+  try {
+    let roomUrl: string | undefined;
+
+    const createRes = await fetch("https://api.daily.co/v1/rooms", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: dailyRoomName,
+        properties: {
+          start_audio_off: true,
+          start_video_off: false,
+          max_participants: MAX_PARTICIPANTS,
+        },
+      }),
+    });
+
+    if (createRes.ok) {
+      const created = (await createRes.json()) as { url?: string };
+      roomUrl = created.url;
+    } else {
+      const getRes = await fetch(`https://api.daily.co/v1/rooms/${dailyRoomName}`, {
+        headers,
+      });
+      if (!getRes.ok) {
+        res.status(502).json({ error: "Failed to initialize Daily.co room" });
+        return;
+      }
+      const existing = (await getRes.json()) as { url?: string };
+      roomUrl = existing.url;
+    }
+
+    const tokenRes = await fetch("https://api.daily.co/v1/meeting-tokens", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        properties: {
+          room_name: dailyRoomName,
+          user_name: req.user?.email || "Student",
+          start_audio_off: true,
+        },
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      res.status(502).json({ error: "Failed to generate video token" });
+      return;
+    }
+
+    const tokenData = (await tokenRes.json()) as { token?: string };
+    res.json({ token: tokenData.token, roomUrl });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Failed to connect to Daily.co",
+    });
+  }
+});
+
 

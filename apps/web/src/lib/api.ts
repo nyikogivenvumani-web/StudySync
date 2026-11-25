@@ -290,3 +290,20 @@ export async function deleteForumPost(moduleId: string, postId: string): Promise
   });
   if (!res.ok) throw new Error("Failed to delete post");
 }
+
+// --- Video (Daily.co) ---
+
+export async function fetchVideoToken(
+  roomId: string
+): Promise<{ token: string; roomUrl: string }> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/api/rooms/${roomId}/video-token`, {
+    method: "POST",
+    headers,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to get video token");
+  }
+  return res.json();
+}

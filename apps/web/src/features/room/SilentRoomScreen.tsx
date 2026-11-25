@@ -1,6 +1,7 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import {
   ArrowLeft,
+  Camera,
   CameraOff,
   Check,
   Clock3,
@@ -19,6 +20,7 @@ import {
   toggleChecklistItem as apiToggleChecklist,
   updateStudyStatus,
 } from "../../lib/api.js";
+import { useDailyCall, type DailyVideoParticipant } from "../../hooks/useDailyCall.js";
 
 type ChecklistItem = {
   id: string;
@@ -72,6 +74,45 @@ const initialChecklist: ChecklistItem[] = [
   },
 ];
 
+function DailyVideoTile({ participant }: { participant: DailyVideoParticipant }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (participant.videoTrack && !participant.cameraOff) {
+      el.srcObject = new MediaStream([participant.videoTrack]);
+    } else {
+      el.srcObject = null;
+    }
+  }, [participant.videoTrack, participant.cameraOff]);
+
+  return (
+    <article
+      className={`participant-tile${participant.isLocal ? " is-current-user" : ""}${participant.cameraOff ? " is-camera-unavailable" : ""}`}
+    >
+      {participant.cameraOff || !participant.videoTrack ? (
+        <div className="camera-placeholder">
+          <CameraOff size={23} aria-hidden="true" />
+          <strong>Camera off</strong>
+          <span>{participant.name}</span>
+        </div>
+      ) : (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
+        />
+      )}
+      <div className="participant-caption">
+        <span>{participant.name}</span>
+      </div>
+    </article>
+  );
+}
+
 function SilentRoomScreen({
   roomId,
   isClosed,
@@ -83,6 +124,7 @@ function SilentRoomScreen({
   const [checklist, setChecklist] = useState(initialChecklist);
   const [newTask, setNewTask] = useState("");
   const [timerMinutes, setTimerMinutes] = useState(50);
+  const daily = useDailyCall(roomId, !isClosed);
   const moduleCode = roomId.toLowerCase().includes("cos")
     ? "COS1511"
     : "MAT2611";
@@ -211,12 +253,36 @@ function SilentRoomScreen({
             <div className="video-stage-header">
               <span className="live-indicator">
                 <span aria-hidden="true" />
-                Preview room
+                {daily.isConnected ? "Live video" : "Preview room"}
               </span>
-              <span className="video-quality">Low-bandwidth video</span>
+              {daily.isConnected ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={daily.toggleCamera}
+                >
+                  {daily.isCameraOn ? (
+                    <>
+                      <Camera size={14} aria-hidden="true" />
+                      Camera on
+                    </>
+                  ) : (
+                    <>
+                      <CameraOff size={14} aria-hidden="true" />
+                      Camera off
+                    </>
+                  )}
+                </button>
+              ) : (
+                <span className="video-quality">Low-bandwidth video</span>
+              )}
             </div>
             <div className="participant-grid">
-              {participants.map((participant) => (
+              {daily.isConnected && daily.participants.length > 0
+                ? daily.participants.map((p) => (
+                    <DailyVideoTile key={p.id} participant={p} />
+                  ))
+                : participants.map((participant) => (
                 <article
                   className={`participant-tile${participant.currentUser ? " is-current-user" : ""}${participant.cameraUnavailable ? " is-camera-unavailable" : ""}`}
                   key={participant.name}
