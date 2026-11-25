@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   AlertCircle,
   BookOpen,
@@ -9,36 +9,58 @@ import {
   Send,
   ShieldCheck,
 } from "lucide-react";
-import type { ForumPost } from "./forumData.js";
-import { createForumPost } from "../../lib/api.js";
+import { toDisplayPost, type ForumPost } from "./forumData.js";
+import {
+  createForumPost,
+  editForumPost,
+  fetchForumPosts,
+  type ModuleOption,
+} from "../../lib/api.js";
 
 type ForumScreenProps = {
-  moduleCode: string;
-  posts: ForumPost[];
+  modules: ModuleOption[];
+  currentUserId: string;
   onUnavailable: (message: string) => void;
 };
 
-function ForumScreen({
-  moduleCode,
-  posts,
-  onUnavailable,
-}: ForumScreenProps) {
+function ForumScreen({ modules, currentUserId, onUnavailable }: ForumScreenProps) {
+  const [moduleCode, setModuleCode] = useState(modules[0]?.code ?? "");
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [editingPost, setEditingPost] = useState<ForumPost | null>(null);
-  const modulePosts = posts.filter((post) => post.moduleCode === moduleCode);
+  const activeModule = modules.find((m) => m.code === moduleCode);
+  const moduleId = activeModule ? (activeModule.id ?? activeModule.code) : "";
+  const modulePosts = posts;
+
+  const loadPosts = useCallback(() => {
+    if (!moduleId) return Promise.resolve();
+    setLoading(true);
+    return fetchForumPosts(moduleId)
+      .then((data) =>
+        setPosts(data.map((p) => toDisplayPost(p, moduleCode, currentUserId))),
+      )
+      .catch(() => onUnavailable("Could not load forum posts."))
+      .finally(() => setLoading(false));
+  }, [moduleId, moduleCode, currentUserId, onUnavailable]);
+
+  useEffect(() => {
+    void loadPosts();
+  }, [loadPosts]);
 
   function submitPost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft.trim()) return;
-
-    createForumPost(moduleCode, draft.trim()).catch(() => {});
-    onUnavailable(
-      editingPost
-        ? "Edit not saved: the module forum is not connected yet."
-        : "Post not published: the module forum is not connected yet.",
-    );
-    setDraft("");
-    setEditingPost(null);
+    if (!draft.trim() || !moduleId) return;
+    const request = editingPost
+      ? editForumPost(moduleId, editingPost.id, draft.trim())
+      : createForumPost(moduleId, draft.trim());
+    request
+      .then(() => {
+        setDraft("");
+        setEditingPost(null);
+        return loadPosts();
+      })
+      .catch((err: Error) => onUnavailable(err.message));
   }
 
   function startEditing(post: ForumPost) {
@@ -61,16 +83,15 @@ function ForumScreen({
             Share text-only study notices and module updates.
           </p>
         </div>
-        <span className="preview-chip">Preview data</span>
       </header>
 
-      <section className="preview-banner" role="status">
-        <AlertCircle size={18} aria-hidden="true" />
-        <p>
-          Sample posts only. Publishing, editing, and live updates are not
-          connected to the forum service.
-        </p>
-      </section>
+      {modules.length === 0 ? (
+        <section className="empty-state">
+          <AlertCircle size={24} aria-hidden="true" />
+          <h2>Choose a module first</h2>
+          <p>Select your active modules on the Profile page to see their forums.</p>
+        </section>
+      ) : null}
 
       <div className="forum-layout">
         <div className="forum-feed">
@@ -79,6 +100,19 @@ function ForumScreen({
               <span className="catalogue-label">Enrolled module</span>
               <span className="room-module-tag">Code {moduleCode}</span>
             </div>
+            <label className="form-field">
+              <span>Module</span>
+              <select
+                value={moduleCode}
+                onChange={(e) => setModuleCode(e.target.value)}
+              >
+                {modules.map((m) => (
+                  <option key={m.code} value={m.code}>
+                    {m.code} · {m.title}
+                  </option>
+                ))}
+              </select>
+            </label>
             <h2>{moduleCode}: Module notices</h2>
             <p>
               Text-only peer noticeboard for academic notices and schedule
@@ -144,7 +178,7 @@ function ForumScreen({
                 >
                   <header className="forum-post-header">
                     <div className="post-avatar" aria-hidden="true">
-                      {post.role === "Admin" ? (
+                      {post.pinned ? (
                         <ShieldCheck size={18} />
                       ) : (
                         post.author
@@ -157,7 +191,6 @@ function ForumScreen({
                     </div>
                     <div className="post-author">
                       <strong>{post.author}</strong>
-                      <span className="author-role">{post.role}</span>
                       <small>
                         {post.age}
                         {post.edited && (
@@ -196,7 +229,7 @@ function ForumScreen({
               ))
             ) : (
               <div className="empty-inline">
-                <p>No posts for this module yet.</p>
+                <p>{loading ? "Loading posts…" : "No posts for this module yet."}</p>
               </div>
             )}
           </section>
@@ -227,16 +260,6 @@ function ForumScreen({
             </div>
           </section>
 
-          <section className="workspace-card forum-preview-status">
-            <div className="section-heading">
-              <h2>Connection status</h2>
-              <span className="status-chip status-pending">Preview</span>
-            </div>
-            <p>
-              Forum posts are sample content. Your draft will remain on this
-              screen and will not be shared.
-            </p>
-          </section>
         </aside>
       </div>
     </div>

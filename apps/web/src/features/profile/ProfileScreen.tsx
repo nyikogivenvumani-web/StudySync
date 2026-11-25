@@ -1,95 +1,30 @@
-import { useState, useEffect, type FormEvent } from "react";
-import { ArrowRight, BookOpen, Check, Plus, Save, Send } from "lucide-react";
-import { fetchInstitutions, fetchModules, submitModuleRequest } from "../../lib/api.js";
-
-type ModuleOption = {
-  code: string;
-  title: string;
-  subject: string;
-  peers?: number;
-};
-
-type ModuleRequest = {
-  code: string;
-  title: string;
-  institution: string;
-  status: "Pending" | "Approved" | "Rejected";
-};
+import { useState, type FormEvent } from "react";
+import { ArrowRight, Check, Plus, Save, Send } from "lucide-react";
+import { submitModuleRequest, type ModuleOption } from "../../lib/api.js";
 
 type ProfileScreenProps = {
+  modules: ModuleOption[];
   selectedModules: string[];
+  institutionType: "College" | "University" | null;
   onModulesChange: (modules: string[]) => void;
   onSave: () => void;
-  onRequest: () => void;
+  onRequest: (message: string) => void;
   onDiscover: () => void;
 };
 
-const moduleOptions: ModuleOption[] = [
-  {
-    code: "MAT2611",
-    title: "Linear Algebra II & Matrix Methods",
-    subject: "Mathematics",
-    peers: 14,
-  },
-  {
-    code: "COS1511",
-    title: "Introduction to Programming I",
-    subject: "Computer Science",
-    peers: 28,
-  },
-  {
-    code: "ECS1501",
-    title: "Economics IA: Microeconomics",
-    subject: "Economics",
-    peers: 9,
-  },
-];
-
-const sampleRequests: ModuleRequest[] = [
-  {
-    code: "MATH-201",
-    title: "Linear Algebra & Matrix Theory",
-    institution: "Preview University",
-    status: "Pending",
-  },
-  {
-    code: "BIO-110",
-    title: "Molecular & Cellular Biology",
-    institution: "Preview University",
-    status: "Approved",
-  },
-  {
-    code: "ARCH-09",
-    title: "Introduction to Spatial Design",
-    institution: "Preview College",
-    status: "Rejected",
-  },
-];
-
 function ProfileScreen({
+  modules,
   selectedModules,
+  institutionType,
   onModulesChange,
   onSave,
   onRequest,
   onDiscover,
 }: ProfileScreenProps) {
-  const [institution, setInstitution] = useState("");
-  const [institutionList, setInstitutionList] = useState<{ id: string; name: string }[]>([]);
-  const [availableModules, setAvailableModules] = useState<ModuleOption[]>(moduleOptions);
-
-  useEffect(() => {
-    fetchInstitutions()
-      .then((types) => setInstitutionList(types))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    fetchModules(institution)
-      .then((mods) => {
-        if (mods.length > 0) setAvailableModules(mods);
-      })
-      .catch(() => {});
-  }, [institution]);
+  const [institution, setInstitution] = useState<string>(institutionType ?? "");
+  const availableModules = institution
+    ? modules.filter((m) => m.institution_type === institution)
+    : modules;
 
   function toggleModule(code: string) {
     const updatedModules = selectedModules.includes(code)
@@ -102,16 +37,19 @@ function ProfileScreen({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const code = formData.get("moduleCode") as string;
-    const title = formData.get("moduleTitle") as string;
-    if (code) {
-      submitModuleRequest({
-        code,
-        title,
-        institution_type: institution || "University",
-      }).catch(() => {});
-    }
-    onRequest();
+    const code = String(formData.get("moduleCode") ?? "");
+    const title = String(formData.get("moduleTitle") ?? "");
+    const type = String(formData.get("requestInstitution") ?? "University");
+    submitModuleRequest({
+      code,
+      title,
+      institution_type: type === "College" ? "College" : "University",
+    })
+      .then(() => {
+        form.reset();
+        onRequest("Module request submitted. An admin will review it.");
+      })
+      .catch((err: Error) => onRequest(err.message));
   }
 
   return (
@@ -125,16 +63,7 @@ function ProfileScreen({
             discovery.
           </p>
         </div>
-        <span className="preview-chip">Preview data</span>
       </header>
-
-      <section className="preview-banner" role="status">
-        <BookOpen size={18} aria-hidden="true" />
-        <p>
-          Sample catalogue and request data only. Supabase is not connected, so
-          your changes will not be saved or submitted.
-        </p>
-      </section>
 
       <section className="workspace-card" aria-labelledby="institution-heading">
         <div className="section-heading">
@@ -142,7 +71,6 @@ function ProfileScreen({
             <h2 id="institution-heading">Registered institution</h2>
             <p>Select the institution where you are enrolled.</p>
           </div>
-          <span className="catalogue-label">DHET catalogue pending</span>
         </div>
         <label className="form-field">
           <span>Institution</span>
@@ -151,18 +79,8 @@ function ProfileScreen({
             onChange={(event) => setInstitution(event.target.value)}
           >
             <option value="">Select an institution</option>
-            {institutionList.length > 0 ? (
-              institutionList.map((inst) => (
-                <option value={inst.id} key={inst.id}>
-                  {inst.name}
-                </option>
-              ))
-            ) : (
-              <>
-                <option value="University">University</option>
-                <option value="College">College</option>
-              </>
-            )}
+            <option value="University">University</option>
+            <option value="College">College</option>
           </select>
         </label>
       </section>
@@ -200,7 +118,7 @@ function ProfileScreen({
                   <span className="module-description">{module.title}</span>
                   <span className="module-peer-count">
                     <Check size={14} aria-hidden="true" />
-                    {module.peers} peers studying now
+                    {module.institution_type}
                   </span>
                 </span>
               </label>
@@ -209,9 +127,7 @@ function ProfileScreen({
         </fieldset>
 
         <div className="save-row">
-          <p>
-            Your selections preview the modules used to filter discovery.
-          </p>
+          <p>Your selections filter room discovery.</p>
           <button className="primary-button action-button" onClick={onSave}>
             <Save size={16} aria-hidden="true" />
             Save selections
@@ -228,8 +144,7 @@ function ProfileScreen({
             <div>
               <h2 id="request-heading">Request a missing module</h2>
               <p>
-                Submit an inline request for a module not shown in the preview
-                catalogue.
+                Submit a request for a module that is not in the catalogue.
               </p>
             </div>
           </div>
@@ -239,12 +154,9 @@ function ProfileScreen({
         <form className="request-form" onSubmit={handleRequest}>
           <label className="form-field">
             <span>Institution</span>
-            <select required defaultValue="">
-              <option value="" disabled>
-                Select an institution
-              </option>
-              <option value="preview-university">Preview University</option>
-              <option value="preview-college">Preview College</option>
+            <select name="requestInstitution" required defaultValue={institutionType ?? "University"}>
+              <option value="University">University</option>
+              <option value="College">College</option>
             </select>
           </label>
           <label className="form-field">
@@ -272,38 +184,6 @@ function ProfileScreen({
           </button>
         </form>
 
-        <div className="request-list-header">
-          <h3>Your module requests</h3>
-          <span>Sample tracking entries</span>
-        </div>
-        <div className="table-scroll">
-          <table className="request-table">
-            <thead>
-              <tr>
-                <th scope="col">Module code</th>
-                <th scope="col">Title</th>
-                <th scope="col">Institution</th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sampleRequests.map((request) => (
-                <tr key={request.code}>
-                  <td>{request.code}</td>
-                  <td>{request.title}</td>
-                  <td>{request.institution}</td>
-                  <td>
-                    <span
-                      className={`status-chip status-${request.status.toLowerCase()}`}
-                    >
-                      {request.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <button className="text-button continue-link" onClick={onDiscover}>

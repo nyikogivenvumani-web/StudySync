@@ -1,8 +1,10 @@
+import type { ForumPost as ApiForumPost } from "../../lib/api.js";
+
 export type ForumPost = {
   id: string;
+  moduleId: string;
   moduleCode: string;
   author: string;
-  role: "Student" | "Admin";
   age: string;
   body: string;
   edited?: boolean;
@@ -10,40 +12,31 @@ export type ForumPost = {
   ownedByCurrentUser?: boolean;
 };
 
-export const INITIAL_FORUM_POSTS: ForumPost[] = [
-  {
-    id: "pinned-update",
-    moduleCode: "MAT2611",
-    author: "Course Administrator",
-    role: "Admin",
-    age: "2 hours ago",
-    body: "Tutorial moved from 16:00 to 18:00 today. Please review the matrix-rank examples before the session.",
-    pinned: true,
-  },
-  {
-    id: "own-update",
-    moduleCode: "MAT2611",
-    author: "Preview student (You)",
-    role: "Student",
-    age: "45 minutes ago",
-    body: "I am reviewing Section 1.4 before the next study block. The worked examples are helpful.",
-    ownedByCurrentUser: true,
-  },
-  {
-    id: "peer-update",
-    moduleCode: "MAT2611",
-    author: "Sipho M.",
-    role: "Student",
-    age: "15 minutes ago",
-    body: "Shared notes for Gaussian elimination have been updated in the course resources.",
-    edited: true,
-  },
-  {
-    id: "reminder",
-    moduleCode: "COS1511",
-    author: "Lerato D.",
-    role: "Student",
-    age: "3 hours ago",
-    body: "Reminder: the differential equations quiz opens tomorrow at 08:00.",
-  },
-];
+export function formatAge(iso: string, now = Date.now()): string {
+  const minutes = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+export function toDisplayPost(
+  post: ApiForumPost,
+  moduleCode: string,
+  currentUserId: string,
+): ForumPost {
+  const isMine = post.author_id === currentUserId;
+  const name = post.profiles?.full_name || post.author_name || "Student";
+  return {
+    id: post.id,
+    moduleId: post.module_id,
+    moduleCode,
+    author: isMine ? `${name} (You)` : name,
+    age: formatAge(post.created_at),
+    body: post.content,
+    edited: Boolean(post.edited_at),
+    pinned: post.is_pinned,
+    ownedByCurrentUser: isMine,
+  };
+}
