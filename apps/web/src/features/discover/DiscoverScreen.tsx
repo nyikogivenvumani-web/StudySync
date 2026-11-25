@@ -127,16 +127,20 @@ function DiscoverScreen({
             Find open study rooms for your active modules.
           </p>
         </div>
-        <span className="preview-chip">Preview data</span>
+        <span className="preview-chip">
+          {liveOpenRooms.length > 0 || liveClosedRooms.length > 0 ? "Live rooms" : "Preview data"}
+        </span>
       </header>
 
-      <section className="preview-banner" role="status">
-        <WifiOff size={18} aria-hidden="true" />
-        <p>
-          Sample rooms only. Live availability and room actions are not connected
-          yet.
-        </p>
-      </section>
+      {liveOpenRooms.length === 0 && liveClosedRooms.length === 0 && (
+        <section className="preview-banner" role="status">
+          <WifiOff size={18} aria-hidden="true" />
+          <p>
+            Sample rooms only. Live availability and room actions are not connected
+            yet.
+          </p>
+        </section>
+      )}
 
       <section className="module-context" aria-label="Active modules filter">
         <div className="context-title">

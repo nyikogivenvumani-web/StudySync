@@ -187,7 +187,7 @@ function App() {
               </label>
               <span className="connection-chip">
                 <span className="connection-dot" aria-hidden="true" />
-                Preview mode
+                {supabase ? "Connected" : "Preview mode"}
               </span>
             </div>
           </header>
