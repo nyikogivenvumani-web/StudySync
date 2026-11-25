@@ -24,6 +24,7 @@ function App() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [notice, setNotice] = useState("");
+  const [loginAs, setLoginAs] = useState<"student" | "admin">("student");
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(supabase));
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -118,13 +119,31 @@ function App() {
         if (error) throw error;
         setNotice("If your email is registered, a password reset link has been sent.");
       } else if (authMode === "signup") {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const firstName = String(formData.get("firstName") ?? "").trim();
+        const surname = String(formData.get("surname") ?? "").trim();
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: `${firstName} ${surname}`.trim() } },
+        });
         if (error) throw error;
         navigate("/discover");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate("/discover");
+        let message = "";
+        if (loginAs === "admin") {
+          try {
+            const me = await fetchProfile();
+            if (me.role !== "admin") {
+              message = "This account doesn't have admin access. You're signed in as a student.";
+            }
+          } catch (err) {
+            message = `Signed in, but admin access could not be verified: ${err instanceof Error ? err.message : "API unreachable"}`;
+          }
+        }
+        navigate(loginAs === "admin" && !message ? "/admin" : "/discover");
+        if (message) setNotice(message);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Authentication failed";
@@ -389,6 +408,35 @@ function App() {
               required
             />
           </div>
+
+          {authMode === "signup" && !isPasswordReset && (
+            <>
+              <div className="form-field">
+                <label htmlFor="firstName">Name</label>
+                <input id="firstName" name="firstName" autoComplete="given-name" required maxLength={60} />
+              </div>
+              <div className="form-field">
+                <label htmlFor="surname">Surname</label>
+                <input id="surname" name="surname" autoComplete="family-name" required maxLength={60} />
+              </div>
+            </>
+          )}
+
+          {authMode === "login" && !isPasswordReset && (
+            <div className="auth-tabs" role="group" aria-label="Log in as">
+              {(["student", "admin"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className="auth-tab"
+                  aria-pressed={loginAs === r}
+                  onClick={() => setLoginAs(r)}
+                >
+                  {r === "student" ? "Student" : "Admin"}
+                </button>
+              ))}
+            </div>
+          )}
 
           {!isPasswordReset && (
             <div className="form-field">

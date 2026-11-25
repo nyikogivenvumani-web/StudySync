@@ -108,4 +108,15 @@ describe("StudySync screens", () => {
       "StudySync is not configured",
     );
   });
+
+  it("asks for name and surname on sign-up and a role choice on log-in", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(screen.getByRole("group", { name: "Log in as" })).toBeVisible();
+    await user.click(
+      within(screen.getByRole("group", { name: "Account options" })).getByRole("button", { name: "Sign up" }),
+    );
+    expect(screen.getByLabelText("Name")).toBeRequired();
+    expect(screen.getByLabelText("Surname")).toBeRequired();
+  });
 });
