@@ -1,6 +1,6 @@
 import { supabase } from "./supabase.js";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:3001" : "");
 
 async function getAuthHeader(): Promise<Record<string, string>> {
   if (supabase) {
@@ -9,8 +9,43 @@ async function getAuthHeader(): Promise<Record<string, string>> {
       return { Authorization: `Bearer ${session.access_token}` };
     }
   }
-  // Fallback for development preview when Supabase is not connected
-  return { Authorization: "Bearer dev-token" };
+  return {};
+}
+
+export type Profile = {
+  id: string;
+  email?: string;
+  role: "student" | "admin";
+  institution_type: "College" | "University" | null;
+};
+
+export async function fetchProfile(): Promise<Profile> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/api/profile`, { headers });
+  if (!res.ok) throw new Error("Failed to load your profile");
+  return res.json();
+}
+
+export async function editForumPost(moduleId: string, postId: string, content: string): Promise<void> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/api/modules/${moduleId}/forum/${postId}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to edit forum post");
+  }
+}
+
+export async function deleteChecklistItem(roomId: string, itemId: string): Promise<void> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/api/rooms/${roomId}/checklist/${itemId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error("Failed to delete checklist item");
 }
 
 export type ModuleOption = {
@@ -306,4 +341,41 @@ export async function fetchVideoToken(
     throw new Error(err.error || "Failed to get video token");
   }
   return res.json();
+}
+
+// --- Admin ---
+
+export async function createModule(params: {
+  code: string;
+  title: string;
+  subject: string;
+  institution_type: "College" | "University";
+}): Promise<void> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/api/modules`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to add module");
+  }
+}
+
+export async function createRoom(params: {
+  module_id: string;
+  module_code?: string;
+  title?: string;
+}): Promise<void> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/api/rooms`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to create room");
+  }
 }

@@ -1,21 +1,50 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Pin, PinOff, ShieldCheck, Trash2 } from "lucide-react";
-import type { ForumPost } from "../forum/forumData.js";
+import { toDisplayPost, type ForumPost } from "../forum/forumData.js";
+import {
+  deleteForumPost,
+  fetchForumPosts,
+  pinForumPost,
+  type ModuleOption,
+} from "../../lib/api.js";
 import AdminConfirmDialog from "./AdminConfirmDialog.js";
 
 type ForumModerationScreenProps = {
-  posts: ForumPost[];
-  onPostsChange: (posts: ForumPost[]) => void;
+  modules: ModuleOption[];
+  currentUserId: string;
   onUnavailable: (message: string) => void;
   onCatalogue: () => void;
 };
 
 function ForumModerationScreen({
-  posts,
-  onPostsChange,
+  modules: catalogue,
+  currentUserId,
   onUnavailable,
   onCatalogue,
 }: ForumModerationScreenProps) {
+  const [posts, setPosts] = useState<ForumPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const loadPosts = useCallback(async () => {
+    try {
+      const all = await Promise.all(
+        catalogue.map(async (m) =>
+          (await fetchForumPosts(m.id ?? m.code)).map((p) =>
+            toDisplayPost(p, m.code, currentUserId),
+          ),
+        ),
+      );
+      setPosts(all.flat());
+    } catch {
+      onUnavailable("Could not load forum posts.");
+    } finally {
+      setLoading(false);
+    }
+  }, [catalogue, currentUserId, onUnavailable]);
+
+  useEffect(() => {
+    void loadPosts();
+  }, [loadPosts]);
+
   const [moduleFilter, setModuleFilter] = useState("all");
   const [removeId, setRemoveId] = useState<string | null>(null);
   const modules = useMemo(
@@ -29,23 +58,16 @@ function ForumModerationScreen({
   const postToRemove = posts.find((post) => post.id === removeId);
 
   function togglePin(post: ForumPost) {
-    const pinned = !post.pinned;
-    onPostsChange(
-      posts.map((item) =>
-        item.id === post.id ? { ...item, pinned } : item,
-      ),
-    );
-    onUnavailable(
-      `Preview only: ${post.id} is now ${pinned ? "pinned" : "unpinned"} in this browser session. No server changes were saved.`,
-    );
+    pinForumPost(post.moduleId, post.id, !post.pinned)
+      .then(loadPosts)
+      .catch(() => onUnavailable("Could not change the pin on that post."));
   }
 
   function removePost() {
     if (!postToRemove) return;
-    onPostsChange(posts.filter((post) => post.id !== postToRemove.id));
-    onUnavailable(
-      "Preview only: the post was removed from this browser session. No server changes were saved.",
-    );
+    deleteForumPost(postToRemove.moduleId, postToRemove.id)
+      .then(loadPosts)
+      .catch(() => onUnavailable("Could not remove that post."));
     setRemoveId(null);
   }
 
@@ -60,25 +82,13 @@ function ForumModerationScreen({
             academic noticeboard.
           </p>
         </div>
-        <span className="preview-chip admin-preview-chip">
-          <ShieldCheck size={14} aria-hidden="true" />
-          Admin preview
-        </span>
       </header>
-
-      <section className="preview-banner" role="status">
-        <ShieldCheck size={18} aria-hidden="true" />
-        <p>
-          Moderation changes affect this browser preview only and are not saved
-          to a forum service.
-        </p>
-      </section>
 
       <section className="admin-workspace-card moderation-workspace">
         <div className="moderation-toolbar">
           <div>
             <h2>Module posts</h2>
-            <p>{visiblePosts.length} preview posts</p>
+            <p>{loading ? "Loading…" : `${visiblePosts.length} posts`}</p>
           </div>
           <label className="form-field moderation-filter">
             <span>Filter by module</span>
@@ -107,7 +117,7 @@ function ForumModerationScreen({
                   <div className="moderation-post-meta">
                     <span className="room-module-tag">{post.moduleCode}</span>
                     <span className="moderation-author">
-                      {post.author} · {post.role}
+                      {post.author}
                     </span>
                     <span className="moderation-age">{post.age}</span>
                     {post.edited && (
@@ -167,7 +177,7 @@ function ForumModerationScreen({
       {postToRemove && (
         <AdminConfirmDialog
           title="Remove this forum post?"
-          description={`Remove the post by ${postToRemove.author} in ${postToRemove.moduleCode}? It will disappear from the student forum preview.`}
+          description={`Remove the post by ${postToRemove.author} in ${postToRemove.moduleCode}? It will disappear from the student forum.`}
           confirmLabel="Remove post"
           onCancel={() => setRemoveId(null)}
           onConfirm={removePost}

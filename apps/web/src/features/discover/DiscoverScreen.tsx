@@ -33,50 +33,6 @@ type DiscoverScreenProps = {
 
 const capacity = 20;
 
-const roomSamples: Room[] = [
-  {
-    id: "room-mat-01",
-    moduleCode: "MAT2611",
-    title: "Linear Algebra II & Matrix Methods",
-    participants: 8,
-    status: "open",
-  },
-  {
-    id: "room-cos-01",
-    moduleCode: "COS1511",
-    title: "Introduction to Programming I",
-    participants: 14,
-    status: "open",
-  },
-  {
-    id: "room-mat-02",
-    moduleCode: "MAT2611",
-    title: "Linear Algebra II & Matrix Methods",
-    participants: capacity,
-    status: "full",
-  },
-  {
-    id: "room-ecs-01",
-    moduleCode: "ECS1501",
-    title: "Economics IA: Microeconomics",
-    participants: 9,
-    status: "open",
-  },
-];
-
-const closedRoomSamples: ClosedRoom[] = [
-  {
-    id: "room-cos-closed",
-    moduleCode: "COS1511",
-    title: "Introduction to Programming I",
-  },
-  {
-    id: "room-ecs-closed",
-    moduleCode: "ECS1501",
-    title: "Economics IA: Microeconomics",
-  },
-];
-
 function DiscoverScreen({
   selectedModules,
   onEditProfile,
@@ -86,36 +42,32 @@ function DiscoverScreen({
   const [liveOpenRooms, setLiveOpenRooms] = useState<RoomItem[]>([]);
   const [liveClosedRooms, setLiveClosedRooms] = useState<RoomItem[]>([]);
 
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
     fetchRooms()
       .then((data) => {
-        if (data.openRooms?.length > 0) setLiveOpenRooms(data.openRooms);
-        if (data.closedRooms?.length > 0) setLiveClosedRooms(data.closedRooms);
+        setLiveOpenRooms(data.openRooms ?? []);
+        setLiveClosedRooms(data.closedRooms ?? []);
       })
-      .catch(() => {});
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
 
-  const openRooms: Room[] = liveOpenRooms.length > 0
-    ? liveOpenRooms
-        .filter((r) => !r.module_code || selectedModules.includes(r.module_code))
-        .map((r) => ({
-          id: r.id,
-          moduleCode: r.module_code || "MAT2611",
-          title: r.title,
-          participants: r.occupancy,
-          status: r.is_full ? ("full" as const) : ("open" as const),
-        }))
-    : roomSamples.filter((room) => selectedModules.includes(room.moduleCode));
+  const openRooms: Room[] = liveOpenRooms
+    .filter((r) => !r.module_code || selectedModules.includes(r.module_code))
+    .map((r) => ({
+      id: r.id,
+      moduleCode: r.module_code ?? "",
+      title: r.title,
+      participants: r.occupancy,
+      status: r.is_full ? ("full" as const) : ("open" as const),
+    }));
 
-  const closedRooms: ClosedRoom[] = liveClosedRooms.length > 0
-    ? liveClosedRooms
-        .filter((r) => !r.module_code || selectedModules.includes(r.module_code))
-        .map((r) => ({
-          id: r.id,
-          moduleCode: r.module_code || "MAT2611",
-          title: r.title,
-        }))
-    : closedRoomSamples.filter((room) => selectedModules.includes(room.moduleCode));
+  const closedRooms: ClosedRoom[] = liveClosedRooms
+    .filter((r) => !r.module_code || selectedModules.includes(r.module_code))
+    .map((r) => ({ id: r.id, moduleCode: r.module_code ?? "", title: r.title }));
 
   return (
     <div className="screen-stack">
@@ -127,20 +79,15 @@ function DiscoverScreen({
             Find open study rooms for your active modules.
           </p>
         </div>
-        <span className="preview-chip">
-          {liveOpenRooms.length > 0 || liveClosedRooms.length > 0 ? "Live rooms" : "Preview data"}
-        </span>
       </header>
 
-      {liveOpenRooms.length === 0 && liveClosedRooms.length === 0 && (
-        <section className="preview-banner" role="status">
+      {loadError && (
+        <section className="preview-banner" role="alert">
           <WifiOff size={18} aria-hidden="true" />
-          <p>
-            Sample rooms only. Live availability and room actions are not connected
-            yet.
-          </p>
+          <p>Could not load study rooms. Check your connection and try again.</p>
         </section>
       )}
+      {loading && <p role="status">Loading study rooms…</p>}
 
       <section className="module-context" aria-label="Active modules filter">
         <div className="context-title">
@@ -202,7 +149,7 @@ function DiscoverScreen({
                 <h2 id="open-rooms-heading">Open rooms</h2>
                 <p>Rooms for your selected modules, with seats available.</p>
               </div>
-              <span className="room-count">{openRooms.length} sample rooms</span>
+              <span className="room-count">{openRooms.length} rooms</span>
             </div>
 
             {openRooms.length > 0 ? (
@@ -274,7 +221,7 @@ function DiscoverScreen({
             ) : (
               <div className="empty-inline">
                 <Users size={20} aria-hidden="true" />
-                <p>No sample rooms are available for the selected modules.</p>
+                <p>No open rooms are available for the selected modules.</p>
               </div>
             )}
           </section>
@@ -285,7 +232,7 @@ function DiscoverScreen({
                 <h2 id="closed-rooms-heading">Closed rooms</h2>
                 <p>Previously closed rooms remain available for checklists.</p>
               </div>
-              <span className="room-count">{closedRooms.length} sample rooms</span>
+              <span className="room-count">{closedRooms.length} rooms</span>
             </div>
             {closedRooms.length > 0 ? (
               <div className="closed-room-list">

@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   AlertCircle,
   BookOpenCheck,
   Eye,
   EyeOff,
+  LogOut,
   User,
 } from "lucide-react";
 import { NAV_ITEMS } from "./lib/navigation.js";
@@ -13,26 +14,73 @@ import ForumModerationScreen from "./features/admin/ForumModerationScreen.js";
 import DiscoverScreen from "./features/discover/DiscoverScreen.js";
 import ProfileScreen from "./features/profile/ProfileScreen.js";
 import ForumScreen from "./features/forum/ForumScreen.js";
-import { INITIAL_FORUM_POSTS, type ForumPost } from "./features/forum/forumData.js";
+import { fetchModules, fetchProfile, type ModuleOption, type Profile } from "./lib/api.js";
 import SilentRoomScreen from "./features/room/SilentRoomScreen.js";
 
 type AuthMode = "login" | "signup";
-type PreviewRole = "student" | "admin";
 
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [notice, setNotice] = useState("");
-  const [previewRole, setPreviewRole] = useState<PreviewRole>("student");
-  const [forumPosts, setForumPosts] =
-    useState<ForumPost[]>(INITIAL_FORUM_POSTS);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase));
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [catalogue, setCatalogue] = useState<ModuleOption[]>([]);
   const isPasswordReset = pathname === "/reset-password";
   const isAuthRoute = pathname === "/" || isPasswordReset;
-  const [selectedModules, setSelectedModules] = useState([
-    "MAT2611",
-    "COS1511",
-  ]);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setUserId(data.session?.user.id ?? null);
+      setAuthLoading(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user.id ?? null);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  const loadCatalogue = useCallback(() => {
+    fetchModules()
+      .then(setCatalogue)
+      .catch(() => setNotice("Could not load the module catalogue."));
+  }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      setProfile(null);
+      setSelectedModules([]);
+      return;
+    }
+    fetchProfile()
+      .then(setProfile)
+      .catch(() => setNotice("Could not load your profile."));
+    loadCatalogue();
+    try {
+      const saved = localStorage.getItem(`studysync:modules:${userId}`);
+      setSelectedModules(saved ? (JSON.parse(saved) as string[]) : []);
+    } catch {
+      setSelectedModules([]);
+    }
+  }, [userId, loadCatalogue]);
+
+  function saveSelections() {
+    try {
+      localStorage.setItem(`studysync:modules:${userId}`, JSON.stringify(selectedModules));
+      setNotice("Your active modules were saved on this device.");
+    } catch {
+      setNotice("Could not save your selections.");
+    }
+  }
+
+  async function signOut() {
+    await supabase?.auth.signOut();
+    navigate("/");
+  }
 
   useEffect(() => {
     const handlePopState = () => {
@@ -58,11 +106,7 @@ function App() {
     const password = formData.get("password") as string;
 
     if (!supabase) {
-      setNotice(
-        isPasswordReset
-          ? "Password recovery is not available until Supabase Auth is connected."
-          : "Authentication is not connected yet. Connect Supabase Auth to continue."
-      );
+      setNotice("StudySync is not configured: the Supabase environment variables are missing.");
       return;
     }
 
@@ -97,10 +141,23 @@ function App() {
     setNotice(message);
   }
 
+  useEffect(() => {
+    if (authLoading) return;
+    if (!userId && !isAuthRoute) navigate("/");
+    else if (userId && pathname === "/") navigate("/discover");
+  }, [authLoading, userId, pathname]);
+
+  if (!isAuthRoute && (authLoading || !userId)) {
+    return (
+      <main className="auth-page">
+        <p role="status">Loading StudySync…</p>
+      </main>
+    );
+  }
+
   if (!isAuthRoute) {
     const isAdminRoute = pathname.startsWith("/admin");
-    const isAdminPreview = previewRole === "admin";
-    const hasAdminAccess = isAdminPreview;
+    const hasAdminAccess = profile?.role === "admin";
     const activeScreen = isAdminRoute
       ? pathname === "/admin/moderation"
         ? "moderation"
@@ -121,9 +178,8 @@ function App() {
           item.id === "profile" ||
           item.id === "admin"),
     );
-    const roomId = pathname.split("/")[2] ?? "preview-room";
-    const isClosedRoom = roomId.includes("closed");
-    const forumModuleCode = selectedModules[0] ?? "MAT2611";
+    const roomId = pathname.split("/")[2] ?? "";
+    const forumModules = catalogue.filter((m) => selectedModules.includes(m.code));
 
     return (
       <div className="workspace-layout">
@@ -140,8 +196,8 @@ function App() {
             <span>StudySync</span>
           </a>
           <div className="workspace-context">
-            <span>Preview role</span>
-            <strong>{isAdminPreview ? "Admin preview" : "Student preview"}</strong>
+            <span>Signed in as</span>
+            <strong>{hasAdminAccess ? "Admin" : "Student"}</strong>
           </div>
           <StudentNavigation
             items={navigationItems}
@@ -153,9 +209,17 @@ function App() {
               <User size={17} />
             </span>
             <span>
-              <strong>Preview student</strong>
-              <small>Demo account</small>
+              <strong>{profile?.email ?? "Your account"}</strong>
+              <small>{hasAdminAccess ? "Administrator" : "Student"}</small>
             </span>
+            <button
+              type="button"
+              className="text-button"
+              aria-label="Sign out"
+              onClick={signOut}
+            >
+              <LogOut size={16} aria-hidden="true" />
+            </button>
           </div>
         </aside>
 
@@ -170,25 +234,6 @@ function App() {
               </span>
             </div>
             <div className="topbar-actions">
-              <label className="preview-role-control">
-                <span>Preview role</span>
-                <select
-                  aria-label="Preview role"
-                  value={previewRole}
-                  onChange={(event) =>
-                    setPreviewRole(
-                      event.target.value === "admin" ? "admin" : "student",
-                    )
-                  }
-                >
-                  <option value="student">Student</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-              <span className="connection-chip">
-                <span className="connection-dot" aria-hidden="true" />
-                {supabase ? "Connected" : "Preview mode"}
-              </span>
             </div>
           </header>
 
@@ -205,64 +250,68 @@ function App() {
                 <div>
                   <p className="eyebrow">Admin-only area</p>
                   <h1>You don't have permission to access this page.</h1>
-                  <p>
-                    Switch to the Admin preview role to view these screens.
-                  </p>
+                  <p>These screens are available to administrators only.</p>
                 </div>
               </section>
             ) : activeScreen === "admin" ? (
               <AdminCatalogueScreen
+                modules={catalogue}
+                onModulesChanged={loadCatalogue}
                 onUnavailable={showUnavailableMessage}
                 onModeration={() => navigate("/admin/moderation")}
               />
             ) : activeScreen === "moderation" ? (
               <ForumModerationScreen
-                posts={forumPosts}
-                onPostsChange={setForumPosts}
+                modules={catalogue}
+                currentUserId={userId ?? ""}
                 onUnavailable={showUnavailableMessage}
                 onCatalogue={() => navigate("/admin")}
               />
             ) : activeScreen === "profile" ? (
               <ProfileScreen
+                modules={catalogue}
                 selectedModules={selectedModules}
+                institutionType={profile?.institution_type ?? null}
                 onModulesChange={setSelectedModules}
-                onSave={() =>
-                  showUnavailableMessage(
-                    "Preview only: selections have not been saved to your account.",
-                  )
-                }
-                onRequest={() =>
-                  showUnavailableMessage(
-                    "Request not submitted: module requests need the Supabase connection.",
-                  )
-                }
+                onSave={saveSelections}
+                onRequest={showUnavailableMessage}
                 onDiscover={() => navigate("/discover")}
               />
             ) : activeScreen === "discover" ? (
               <DiscoverScreen
                 selectedModules={selectedModules}
                 onEditProfile={() => navigate("/profile")}
-                onJoinRoom={() =>
-                  showUnavailableMessage(
-                    "Room joining is not connected yet. No seat has been reserved.",
-                  )
-                }
+                onJoinRoom={(id) => navigate(`/room/${id}`)}
                 onViewChecklist={(closedRoomId) =>
                   navigate(`/room/${closedRoomId}`)
                 }
               />
             ) : activeScreen === "room" ? (
-              <SilentRoomScreen
-                roomId={roomId}
-                isClosed={isClosedRoom}
-                onDiscover={() => navigate("/discover")}
-                onForum={() => navigate("/forum")}
-                onUnavailable={showUnavailableMessage}
-              />
+              roomId ? (
+                <SilentRoomScreen
+                  key={roomId}
+                  roomId={roomId}
+                  currentUserId={userId ?? ""}
+                  onDiscover={() => navigate("/discover")}
+                  onForum={() => navigate("/forum")}
+                  onUnavailable={showUnavailableMessage}
+                />
+              ) : (
+                <section className="empty-state">
+                  <h2>Pick a room to join</h2>
+                  <button
+                    className="primary-button action-button"
+                    onClick={() => navigate("/discover")}
+                  >
+                    Browse study rooms
+                  </button>
+                </section>
+              )
             ) : (
               <ForumScreen
-                moduleCode={forumModuleCode}
-                posts={forumPosts}
+                key={forumModules.map((m) => m.code).join(",")}
+                modules={forumModules}
+                currentUserId={userId ?? ""}
                 onUnavailable={showUnavailableMessage}
               />
             )}
