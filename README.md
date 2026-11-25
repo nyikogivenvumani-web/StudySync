@@ -52,3 +52,15 @@ npm run build
 
 The GitHub Actions workflow runs these checks on pull requests and pushes to
 `main`. Never commit credentials or production secrets.
+
+## Test logins
+
+For development and demos only. Create them by running `supabase/seed/test_users.sql` in the Supabase SQL editor (safe to re-run), then delete them before real users sign up.
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@studysync.test` | `Admin#Test2026` |
+| Student (University) | `student@studysync.test` | `Student#Test2026` |
+| Student (College) | `student2@studysync.test` | `Student#Test2026` |
+
+On the log-in page choose **Admin** or **Student** to match the account. The role is stored in `profiles.role` and checked by the API, so the API needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` set.
